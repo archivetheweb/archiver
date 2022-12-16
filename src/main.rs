@@ -4,7 +4,9 @@ use signal_hook::consts::SIGINT;
 use signal_hook::consts::SIGTERM;
 use std::fs;
 use std::process::{self, Command, Stdio};
+use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
+use std::thread;
 use std::{thread::sleep, time::Duration};
 
 const ARCHIVE_DIR: &str = "archivoor";
@@ -14,6 +16,8 @@ fn main() {
     let should_terminate = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate)).unwrap();
     signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate)).unwrap();
+
+    let (tx, rx) = channel();
 
     // first check if we have a collection with wb-manager
     let exists = fs::try_exists(format!("./{}/{}", BASE_DIR, ARCHIVE_DIR)).unwrap();
@@ -31,16 +35,41 @@ fn main() {
 
     // then we start the wayback server
     let mut wayback = Command::new("wayback")
-        .args(["--record", "--live", "-a"])
+        .args(["--record", "--live"])
+        // .args(["--record", "--live", "-a"])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
 
     sleep(Duration::from_secs(2));
 
-    browse("https://wikipedia.org");
+    thread::spawn(move || {
+        // TODO crawl logic
+        browse("https://wikipedia.org");
+        browse("https://en.wikipedia.org");
 
-    while !should_terminate.load(Ordering::Relaxed) {}
+        tx.send("done").unwrap();
+
+        println!("{}", "navigation ended")
+    });
+
+    while !should_terminate.load(Ordering::Relaxed) {
+        match rx.try_recv() {
+            Ok(res) => {
+                println!("{}", res);
+
+                // when done, we read the recordings
+                break;
+            }
+            Err(TryRecvError::Empty) => {
+                sleep(Duration::from_secs(1));
+                continue;
+            }
+            Err(e) => {
+                println!("Error: {:?}", e);
+            }
+        }
+    }
 
     println!("{}", "Terminating...");
     wayback.kill().unwrap();
