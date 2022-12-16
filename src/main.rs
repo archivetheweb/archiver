@@ -1,4 +1,6 @@
 #![feature(fs_try_exists)]
+use headless_chrome::protocol::cdp::types::Event;
+use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use headless_chrome::Browser;
 use signal_hook::consts::SIGINT;
 use signal_hook::consts::SIGTERM;
@@ -35,9 +37,11 @@ fn main() {
 
     // then we start the wayback server
     let mut wayback = Command::new("wayback")
-        .args(["--record", "--live"])
+        .args(["--record", "--live", "--enable-auto-fetch"])
         // .args(["--record", "--live", "-a"])
-        .stdout(Stdio::piped())
+        // .args(["--record", "--live"])
+        .stdout(Stdio::null())
+        // .stdout(Stdio::piped())
         .spawn()
         .unwrap();
 
@@ -45,12 +49,14 @@ fn main() {
 
     thread::spawn(move || {
         // TODO crawl logic
-        browse("https://wikipedia.org");
-        browse("https://en.wikipedia.org");
+        // browse("https://wikipedia.org");
+        // browse("https://en.wikipedia.org");
+        browse("https://archivetheweb.com/");
+        sleep(Duration::from_secs(2));
+
+        println!("{}", "navigation ended");
 
         tx.send("done").unwrap();
-
-        println!("{}", "navigation ended")
     });
 
     while !should_terminate.load(Ordering::Relaxed) {
@@ -78,14 +84,59 @@ fn main() {
 
 fn browse(url: &str) {
     let browser = Browser::default().unwrap();
+    /*     let browser = Browser::new(
+        LaunchOptionsBuilder::default()
+            .headless(true)
+            .build()
+            .unwrap(),
+    )
+    .unwrap(); */
 
     let tab = browser.wait_for_initial_tab().unwrap();
 
     let url = format!("http://localhost:8080/{}/record/{}", ARCHIVE_DIR, url);
 
-    println!("{}", url);
     tab.navigate_to(&url)
         .unwrap()
         .wait_until_navigated()
         .unwrap();
+
+    tab.bring_to_front().unwrap();
+
+    let title = tab.get_title().unwrap();
+
+    println!(" title is {}", title);
+
+    // sleep(Duration::from_secs(5))
+
+    let sync_event = Arc::new(move |event: &Event| match event {
+        Event::PageLifecycleEvent(lifecycle) => {
+            if lifecycle.params.name == "DOMContentLoaded" {
+                println!("{}", "loaded");
+            }
+        }
+        _ => {}
+    });
+
+    tab.add_event_listener(sync_event).unwrap();
+
+    // let element = tab.wait_for_element("wb_iframe_div").unwrap();
+
+    let func = "
+    (function () { 
+        let h = document.getElementById('replay_iframe');
+        h.contentWindow.scrollTo({ left: 0, top: document.body.scrollHeight, behavior: 'smooth' });
+        return 41;
+    })();";
+
+    let rem = tab.evaluate(func, true).unwrap();
+
+    println!("{}", rem.description.unwrap());
+
+    sleep(Duration::from_secs(2));
+
+    let _png = tab
+        .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)
+        .unwrap();
+    fs::write("a.png", _png).unwrap();
 }
