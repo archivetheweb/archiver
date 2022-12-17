@@ -2,16 +2,15 @@
 use headless_chrome::{
     browser::default_executable, protocol::cdp::types::Event, Browser, LaunchOptions,
 };
-use signal_hook::consts::SIGINT;
-use signal_hook::consts::SIGTERM;
+use signal_hook::consts::{SIGINT, SIGTERM};
 use std::fs;
 use std::process::{self, Command, Stdio};
-use std::sync::mpsc::sync_channel;
-use std::sync::mpsc::SyncSender;
-use std::sync::mpsc::TryRecvError;
-use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
-use std::thread;
-use std::{thread::sleep, time::Duration};
+use std::sync::mpsc::{sync_channel, SyncSender, TryRecvError};
+use std::{
+    sync::{atomic::AtomicBool, atomic::Ordering, Arc},
+    thread::{self, sleep},
+    time::Duration,
+};
 
 const ARCHIVE_DIR: &str = "archivoor";
 const BASE_DIR: &str = "collections";
@@ -41,29 +40,24 @@ fn main() {
     let mut wayback = Command::new("wayback")
         .args(["--record", "--live", "--enable-auto-fetch"])
         .stdout(Stdio::null())
-        // .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .spawn()
         .unwrap();
 
+    // TODO ensure it runs properly
+    // we wait for it to start running
     sleep(Duration::from_secs(2));
 
     let tx1 = tx.clone();
 
     thread::spawn(move || {
         // TODO crawl logic
-        // browse("https://wikipedia.org");
-        // browse("https://en.wikipedia.org");
         browse("https://archivetheweb.com/", tx1);
-        println!("{}", "navigation ended");
-
-        tx.send("done".to_string()).unwrap();
     });
 
     while !should_terminate.load(Ordering::Relaxed) {
         match rx.try_recv() {
-            Ok(res) => {
-                println!("{}", res);
-
+            Ok(_res) => {
                 // when done, we read the recordings
                 break;
             }
@@ -79,11 +73,10 @@ fn main() {
 
     println!("{}", "Terminating...");
     wayback.kill().unwrap();
-    println!("{}", "wayback killed");
+    println!("{}", "Child process killed, goodbye");
 }
 
 fn browse(url: &str, tx: SyncSender<String>) {
-    // let browser = Browser::default().unwrap();
     let options = LaunchOptions::default_builder()
         .path(Some(default_executable().unwrap()))
         .window_size(Some((1920, 1080)))
@@ -100,13 +93,31 @@ fn browse(url: &str, tx: SyncSender<String>) {
         .wait_until_navigated()
         .unwrap();
 
-    let title = tab.get_title().unwrap();
+    let tab2 = tab.clone();
 
     let sync_event = Arc::new(move |event: &Event| match event {
         Event::PageLifecycleEvent(lifecycle) => {
             println!("{}", lifecycle.params.name);
             if lifecycle.params.name == "networkIdle" {
-                println!("{}", "networkIdle");
+                let iframe = tab2.wait_for_element("#replay_iframe").unwrap();
+
+                let js_call = iframe
+                    .call_js_fn(
+                        "function () {
+                        let h = document.getElementById('replay_iframe');
+                        h.contentWindow.scrollTo({ left: 0, top: 1000000 });
+                        return h.contentWindow.document.title;
+                    }",
+                        vec![],
+                        false,
+                    )
+                    .unwrap();
+
+                sleep(Duration::from_secs(1));
+
+                let val = js_call.value.unwrap();
+                let _title = val.as_str().unwrap();
+
                 tx.send("done".to_string()).unwrap();
                 return;
             }
@@ -115,20 +126,6 @@ fn browse(url: &str, tx: SyncSender<String>) {
     });
 
     tab.add_event_listener(sync_event).unwrap();
-
-    println!(" title is {}", title);
-
-    let element = tab.wait_for_element("#replay_iframe").unwrap();
-
-    let _js_call = element.call_js_fn(
-        "function () {
-        let h = document.getElementById('replay_iframe');
-        h.contentWindow.scrollTo({ left: 0, top: 1000000, behavior: 'smooth' });
-        return 41;
-    }",
-        vec![],
-        false,
-    );
 
     sleep(Duration::from_secs(10));
 }
