@@ -1,12 +1,11 @@
 #![feature(fs_try_exists)]
-use headless_chrome::protocol::cdp::types::Event;
 use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use headless_chrome::Browser;
 use signal_hook::consts::SIGINT;
 use signal_hook::consts::SIGTERM;
 use std::fs;
 use std::process::{self, Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::{channel, TryRecvError};
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
 use std::thread;
 use std::{thread::sleep, time::Duration};
@@ -39,7 +38,7 @@ fn main() {
     let mut wayback = Command::new("wayback")
         .args(["--record", "--live", "--enable-auto-fetch"])
         // .args(["--record", "--live", "-a"])
-        // .args(["--record", "--live"])
+        .args(["--record", "--live"])
         .stdout(Stdio::null())
         // .stdout(Stdio::piped())
         .spawn()
@@ -84,13 +83,6 @@ fn main() {
 
 fn browse(url: &str) {
     let browser = Browser::default().unwrap();
-    /*     let browser = Browser::new(
-        LaunchOptionsBuilder::default()
-            .headless(true)
-            .build()
-            .unwrap(),
-    )
-    .unwrap(); */
 
     let tab = browser.wait_for_initial_tab().unwrap();
 
@@ -101,37 +93,23 @@ fn browse(url: &str) {
         .wait_until_navigated()
         .unwrap();
 
-    tab.bring_to_front().unwrap();
-
     let title = tab.get_title().unwrap();
 
     println!(" title is {}", title);
 
-    // sleep(Duration::from_secs(5))
+    let element = tab.wait_for_element("#replay_iframe").unwrap();
 
-    let sync_event = Arc::new(move |event: &Event| match event {
-        Event::PageLifecycleEvent(lifecycle) => {
-            if lifecycle.params.name == "DOMContentLoaded" {
-                println!("{}", "loaded");
-            }
-        }
-        _ => {}
-    });
-
-    tab.add_event_listener(sync_event).unwrap();
-
-    // let element = tab.wait_for_element("wb_iframe_div").unwrap();
-
-    let func = "
-    (function () { 
+    let js_call = element.call_js_fn(
+        "function () {
         let h = document.getElementById('replay_iframe');
-        h.contentWindow.scrollTo({ left: 0, top: document.body.scrollHeight, behavior: 'smooth' });
+        h.contentWindow.scrollTo({ left: 0, top: 100000, behavior: 'smooth' });
         return 41;
-    })();";
+    }",
+        vec![],
+        false,
+    );
 
-    let rem = tab.evaluate(func, true).unwrap();
-
-    println!("{}", rem.description.unwrap());
+    println!(" description {:?}", js_call.unwrap().description);
 
     sleep(Duration::from_secs(2));
 
