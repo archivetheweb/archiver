@@ -1,4 +1,5 @@
 #![feature(fs_try_exists)]
+use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use headless_chrome::{
     browser::default_executable, protocol::cdp::types::Event, Browser, LaunchOptions,
 };
@@ -34,19 +35,21 @@ fn main() {
             println!("{}", "Problem initializing collection directory");
             process::exit(res.code().unwrap());
         }
+
+        fs::create_dir(format!("{}/{}/screenshots", BASE_DIR, ARCHIVE_DIR)).unwrap();
     }
 
     // then we start the wayback server
     let mut wayback = Command::new("wayback")
         .args(["--record", "--live", "--enable-auto-fetch"])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        // .stderr(Stdio::null())
         .spawn()
         .unwrap();
 
     // TODO ensure it runs properly
     // we wait for it to start running
-    sleep(Duration::from_secs(2));
+    sleep(Duration::from_secs(3));
 
     let tx1 = tx.clone();
 
@@ -99,24 +102,16 @@ fn browse(url: &str, tx: SyncSender<String>) {
         Event::PageLifecycleEvent(lifecycle) => {
             println!("{}", lifecycle.params.name);
             if lifecycle.params.name == "networkIdle" {
-                let iframe = tab2.wait_for_element("#replay_iframe").unwrap();
+                let _title = tab2.get_title().unwrap();
 
-                let js_call = iframe
-                    .call_js_fn(
-                        "function () {
-                        let h = document.getElementById('replay_iframe');
-                        h.contentWindow.scrollTo({ left: 0, top: 1000000 });
-                        return h.contentWindow.document.title;
-                    }",
-                        vec![],
-                        false,
-                    )
+                let _png = tab2
+                    .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)
                     .unwrap();
-
-                sleep(Duration::from_secs(1));
-
-                let val = js_call.value.unwrap();
-                let _title = val.as_str().unwrap();
+                fs::write(
+                    format!("{}/{}/screenshots/{}.png", BASE_DIR, ARCHIVE_DIR, "a"),
+                    _png,
+                )
+                .unwrap();
 
                 tx.send("done".to_string()).unwrap();
                 return;
