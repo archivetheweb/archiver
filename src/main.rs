@@ -3,7 +3,9 @@ use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use headless_chrome::{
     browser::default_executable, protocol::cdp::types::Event, Browser, LaunchOptions,
 };
+use reqwest::Url;
 use signal_hook::consts::{SIGINT, SIGTERM};
+use std::collections::HashSet;
 use std::fs;
 use std::process::{self, Command, Stdio};
 use std::sync::mpsc::{sync_channel, SyncSender, TryRecvError};
@@ -12,13 +14,13 @@ use std::{
     thread::{self, sleep},
     time::Duration,
 };
-
 const ARCHIVE_DIR: &str = "archivoor";
 const BASE_DIR: &str = "collections";
 
 const BASE_URL: &str = "http://localhost:8080";
 
 fn main() {
+    let visited: Arc<HashSet<String>> = Arc::new(HashSet::new());
     let should_terminate = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate)).unwrap();
     signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate)).unwrap();
@@ -97,31 +99,57 @@ fn browse(url: &str, tx: SyncSender<String>) {
         .wait_until_navigated()
         .unwrap();
 
-    let tab2 = tab.clone();
+    let rs = tab.find_elements("a").unwrap();
 
-    let sync_event = Arc::new(move |event: &Event| match event {
-        Event::PageLifecycleEvent(lifecycle) => {
-            println!("{}", lifecycle.params.name);
-            if lifecycle.params.name == "networkIdle" {
-                let _title = tab2.get_title().unwrap();
+    let links = rs
+        .iter()
+        .map(|x| x.get_attributes().unwrap().unwrap())
+        .filter_map(|x| {
+            let mut peekable = x.into_iter().peekable();
 
-                let _png = tab2
-                    .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)
-                    .unwrap();
-                fs::write(
-                    format!("{}/{}/screenshots/{}.png", BASE_DIR, ARCHIVE_DIR, "a"),
-                    _png,
-                )
-                .unwrap();
+            for elem in peekable.next() {
+                if elem == "href".to_string() {
+                    return peekable.next();
+                }
+            }
 
-                tx.send("done".to_string()).unwrap();
-                return;
+            None
+        })
+        .filter_map(normalize_url(BASE_URL.to_string()))
+        .collect::<HashSet<String>>();
+
+    for link in links {
+        println!("{link}");
+    }
+
+    tab.wait_until_navigated().unwrap();
+
+    let _png = tab
+        .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)
+        .unwrap();
+    fs::write(
+        format!("{}/{}/screenshots/{}.png", BASE_DIR, ARCHIVE_DIR, "a"),
+        _png,
+    )
+    .unwrap();
+
+    tx.send("done".to_string()).unwrap();
+
+    loop {}
+}
+
+fn normalize_url(base_url: String) -> Box<dyn Fn(String) -> Option<String>> {
+    return Box::new(move |url| {
+        let new_url = Url::parse(url.as_str());
+        match new_url {
+            Ok(new_url) => Some(new_url.to_string()),
+            Err(_e) => {
+                if url.starts_with('/') {
+                    Some(format!("{}{}", base_url, url))
+                } else {
+                    None
+                }
             }
         }
-        _ => {}
     });
-
-    tab.add_event_listener(sync_event).unwrap();
-
-    sleep(Duration::from_secs(10));
 }
