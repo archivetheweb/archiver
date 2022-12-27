@@ -16,6 +16,8 @@ use std::{
 const ARCHIVE_DIR: &str = "archivoor";
 const BASE_DIR: &str = "collections";
 
+const BASE_URL: &str = "http://localhost:8080";
+
 fn main() {
     let should_terminate = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate)).unwrap();
@@ -32,7 +34,6 @@ fn main() {
             .unwrap();
 
         if !res.success() {
-            println!("{}", "Problem initializing collection directory");
             process::exit(res.code().unwrap());
         }
 
@@ -47,7 +48,7 @@ fn main() {
         .spawn()
         .unwrap();
 
-    // TODO ensure it runs properly
+    // TODO ensure the proxy is running
     // we wait for it to start running
     sleep(Duration::from_secs(3));
 
@@ -89,7 +90,7 @@ fn browse(url: &str, tx: SyncSender<String>) {
 
     let tab = browser.wait_for_initial_tab().unwrap();
 
-    let url = format!("http://localhost:8080/{}/record/{}", ARCHIVE_DIR, url);
+    let url = format!("{}/{}/record/{}", BASE_URL, ARCHIVE_DIR, url);
 
     tab.navigate_to(&url)
         .unwrap()
