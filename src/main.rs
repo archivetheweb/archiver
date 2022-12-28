@@ -44,7 +44,7 @@ fn main() {
 
     // then we start the wayback server
     let mut wayback = Command::new("wayback")
-        .args(["--record", "--live", "--enable-auto-fetch"])
+        .args(["--record", "--live", "--enable-auto-fetch", "-t 8"])
         .stdout(Stdio::null())
         // .stderr(Stdio::null())
         .spawn()
@@ -58,7 +58,7 @@ fn main() {
 
     thread::spawn(move || {
         // TODO crawl logic
-        browse("https://archivetheweb.com/", tx1);
+        browse("https://bbc.com/", tx1);
     });
 
     while !should_terminate.load(Ordering::Relaxed) {
@@ -99,6 +99,8 @@ fn browse(url: &str, tx: SyncSender<String>) {
         .wait_until_navigated()
         .unwrap();
 
+    tab.wait_for_element("a").unwrap();
+
     let rs = tab.find_elements("a").unwrap();
 
     let links = rs
@@ -122,8 +124,6 @@ fn browse(url: &str, tx: SyncSender<String>) {
         println!("{link}");
     }
 
-    tab.wait_until_navigated().unwrap();
-
     let _png = tab
         .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)
         .unwrap();
@@ -133,6 +133,33 @@ fn browse(url: &str, tx: SyncSender<String>) {
     )
     .unwrap();
 
+    println!("scrolling....");
+
+    let r = tab
+        .evaluate(
+            r#" new Promise((resolve) => {
+        var totalHeight = 0;
+        var distance = 100;
+        var timer = setInterval(() => {
+            var scrollHeight = document.body.scrollHeight;
+            window.scrollBy(0, distance);
+            totalHeight += distance;
+
+            if(totalHeight >= scrollHeight - window.innerHeight){
+                clearInterval(timer);
+                resolve();
+            }
+        }, 100);
+
+    });"#,
+            true,
+        )
+        .unwrap();
+
+    println!("{:?}", r);
+
+    println!("fetching....");
+    sleep(Duration::from_secs(10));
     tx.send("done".to_string()).unwrap();
 
     loop {}
