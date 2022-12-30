@@ -1,5 +1,7 @@
 #![feature(fs_try_exists)]
 use archivoor_v1::browser_controller::BrowserController;
+use archivoor_v1::uploader::Uploader;
+use archivoor_v1::utils::{ARCHIVE_DIR, BASE_DIR};
 use archivoor_v1::warc_writer::Writer;
 use signal_hook::consts::{SIGINT, SIGTERM};
 use std::collections::HashSet;
@@ -11,9 +13,6 @@ use std::{
     thread::{self, sleep},
     time::Duration,
 };
-
-const ARCHIVE_DIR: &str = "archivoor";
-const BASE_DIR: &str = "collections";
 
 fn setup_dir() -> anyhow::Result<()> {
     // first check if we have a collection with wb-manager
@@ -43,7 +42,7 @@ fn main() -> anyhow::Result<()> {
 
     let visited: Arc<HashSet<String>> = Arc::new(HashSet::new());
 
-    let writer = Writer::new(8080, false)?;
+    // let writer = Writer::new(8080, false)?;
 
     let tx1: SyncSender<String> = tx.clone();
 
@@ -51,9 +50,12 @@ fn main() -> anyhow::Result<()> {
 
     thread::spawn(move || {
         // TODO crawl logic
-        let tab = browser.browse("https://bbc.com/", tx1, true);
-        browser.get_links(&tab);
+        // let tab = browser.browse("https://bbc.com/", tx1, true);
+        // browser.get_links(&tab);
     });
+
+    let up = Uploader::new();
+    up.fetch_latest_warc()?;
 
     while !should_terminate.load(Ordering::Relaxed) {
         match rx.try_recv() {
@@ -72,7 +74,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     println!("{}", "Terminating...");
-    writer.terminate()?;
+    // writer.terminate()?;
     println!("{}", "Child process killed, goodbye");
     Ok(())
 }

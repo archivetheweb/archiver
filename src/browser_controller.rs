@@ -8,9 +8,9 @@ use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 use std::{thread::sleep, time::Duration};
 
+use crate::utils::{ARCHIVE_DIR, BASE_DIR};
+
 const BASE_URL: &str = "http://localhost:8080";
-const ARCHIVE_DIR: &str = "archivoor";
-const BASE_DIR: &str = "collections";
 
 const scroll_js: &str = r#" new Promise((resolve) => {
     var totalHeight = 0;
