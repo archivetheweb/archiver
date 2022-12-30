@@ -12,3 +12,4 @@ headless_chrome = { git = "https://github.com/atroche/rust-headless-chrome", fea
 reqwest = "0.11.13"
 signal-hook = "0.3.14"
 clap = "4.0.32"
+anyhow = "1.0.68"
