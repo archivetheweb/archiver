@@ -1,11 +1,10 @@
 #![feature(fs_try_exists)]
 use archivoor_v1::browser_controller::BrowserController;
 use archivoor_v1::warc_writer::Writer;
-use clap::Parser;
 use signal_hook::consts::{SIGINT, SIGTERM};
 use std::collections::HashSet;
 use std::fs;
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 use std::sync::mpsc::{sync_channel, SyncSender, TryRecvError};
 use std::{
     sync::{atomic::AtomicBool, atomic::Ordering, Arc},
@@ -16,13 +15,7 @@ use std::{
 const ARCHIVE_DIR: &str = "archivoor";
 const BASE_DIR: &str = "collections";
 
-fn main() -> anyhow::Result<()> {
-    let should_terminate = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
-    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
-
-    let (tx, rx) = sync_channel(1);
-
+fn setup_dir() -> anyhow::Result<()> {
     // first check if we have a collection with wb-manager
     let exists = fs::try_exists(format!("./{}/{}", BASE_DIR, ARCHIVE_DIR))?;
     if !exists {
@@ -36,6 +29,17 @@ fn main() -> anyhow::Result<()> {
 
         fs::create_dir(format!("{}/{}/screenshots", BASE_DIR, ARCHIVE_DIR))?;
     }
+    Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
+    let should_terminate = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
+    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
+
+    let (tx, rx) = sync_channel(1);
+
+    setup_dir()?;
 
     let visited: Arc<HashSet<String>> = Arc::new(HashSet::new());
 
