@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::sync_channel;
-use std::thread;
+use sysinfo::{ProcessExt, System, SystemExt};
 
 pub struct Writer {
     pub port: u16,
@@ -14,6 +14,15 @@ impl Writer {
     pub fn new(port: u16, debug: bool) -> anyhow::Result<Self> {
         let (tx, rx) = sync_channel(1);
 
+        let s = System::new_all();
+
+        // we kill the processes first
+        for process in s.processes_by_exact_name("wayback") {
+            println!("{} {}", process.pid(), process.name());
+            process.kill();
+        }
+
+        // then run it
         let mut process = Command::new("wayback")
             .args([
                 "--record",
