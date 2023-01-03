@@ -1,11 +1,11 @@
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::sync_channel;
+use std::thread;
 use sysinfo::{ProcessExt, System, SystemExt};
 
 pub struct Writer {
     pub port: u16,
-    debug: bool,
     process: std::process::Child,
 }
 
@@ -18,7 +18,6 @@ impl Writer {
 
         // we kill the processes first
         for process in s.processes_by_exact_name("wayback") {
-            println!("{} {}", process.pid(), process.name());
             process.kill();
         }
 
@@ -63,11 +62,7 @@ impl Writer {
             }
         }
 
-        Ok(Writer {
-            port,
-            debug,
-            process,
-        })
+        Ok(Writer { port, process })
     }
 
     pub fn terminate(mut self) -> anyhow::Result<()> {

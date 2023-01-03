@@ -40,22 +40,23 @@ fn main() -> anyhow::Result<()> {
 
     setup_dir()?;
 
-    let visited: Arc<HashSet<String>> = Arc::new(HashSet::new());
+    let _visited: Arc<HashSet<String>> = Arc::new(HashSet::new());
 
-    // let writer = Writer::new(8080, false)?;
+    let _writer = Writer::new(8080, false)?;
 
     let tx1: SyncSender<String> = tx.clone();
 
-    let browser = BrowserController::new(8112)?;
+    let browser = BrowserController::new(8117)?;
 
     thread::spawn(move || {
         // TODO crawl logic
-        // let tab = browser.browse("https://bbc.com/", tx1, true);
-        // browser.get_links(&tab);
+        let tab = browser.browse("https://bbc.com/", true);
+        browser.get_links(&tab);
+        let up = Uploader::new();
+        let latest = up.fetch_latest_warc().unwrap();
+        println!("{:?}", latest);
+        tx1.send("done".to_string()).unwrap();
     });
-
-    let up = Uploader::new();
-    up.fetch_latest_warc()?;
 
     while !should_terminate.load(Ordering::Relaxed) {
         match rx.try_recv() {

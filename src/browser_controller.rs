@@ -4,15 +4,15 @@ use headless_chrome::Tab;
 use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
 use reqwest::Url;
 use std::fs;
-use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 use std::{thread::sleep, time::Duration};
+use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
 
 use crate::utils::{ARCHIVE_DIR, BASE_DIR};
 
 const BASE_URL: &str = "http://localhost:8080";
 
-const scroll_js: &str = r#" new Promise((resolve) => {
+const SCROLL_JS: &str = r#" new Promise((resolve) => {
     var totalHeight = 0;
     var distance = 100;
     var timer = setInterval(() => {
@@ -42,10 +42,11 @@ impl BrowserController {
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
         let browser = Browser::new(options)?;
+
         Ok(BrowserController { port, browser })
     }
 
-    pub fn browse(&self, url: &str, tx: SyncSender<String>, screenshot: bool) -> Arc<Tab> {
+    pub fn browse(&self, url: &str, screenshot: bool) -> Arc<Tab> {
         let tab = self.browser.wait_for_initial_tab().unwrap();
 
         let url = format!("{}/{}/record/{}", BASE_URL, ARCHIVE_DIR, url);
@@ -73,12 +74,12 @@ impl BrowserController {
 
         println!("scrolling....");
 
-        let r = tab.evaluate(scroll_js, true).unwrap();
+        let r = tab.evaluate(SCROLL_JS, true).unwrap();
 
-        println!("{:?}", r);
+        println!("{:?}", r.description);
 
         sleep(Duration::from_secs(5));
-        tx.send("done".to_string()).unwrap();
+        // tx.send("done".to_string()).unwrap();
 
         tab
     }
@@ -104,6 +105,24 @@ impl BrowserController {
             .collect::<Vec<String>>();
 
         links
+    }
+
+    pub fn kill(&self) -> bool {
+        let pid = self.browser.get_process_id().unwrap();
+
+        let s = System::new();
+        if let Some(process) = s.process(Pid::from_u32(pid)) {
+            process.kill();
+            return true;
+        }
+        false
+    }
+}
+
+impl Drop for BrowserController {
+    fn drop(&mut self) {
+        println!("killing browser process...");
+        self.kill();
     }
 }
 
