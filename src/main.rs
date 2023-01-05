@@ -1,17 +1,15 @@
 #![feature(fs_try_exists)]
-use archivoor_v1::browser_controller::BrowserController;
-use archivoor_v1::uploader::Uploader;
-use archivoor_v1::utils::{normalize_url, ARCHIVE_DIR, BASE_DIR, BASE_URL};
+use archivoor_v1::crawler::Crawler;
+use archivoor_v1::utils::{ARCHIVE_DIR, BASE_DIR, BASE_URL};
 use archivoor_v1::warc_writer::Writer;
 use log::debug;
 use signal_hook::consts::{SIGINT, SIGTERM};
-use std::collections::HashSet;
 use std::fs;
 use std::process::{self, Command};
 use std::sync::mpsc::{sync_channel, SyncSender, TryRecvError};
 use std::{
     sync::{atomic::AtomicBool, atomic::Ordering, Arc},
-    thread::{self, sleep},
+    thread::sleep,
     time::Duration,
 };
 
@@ -32,7 +30,8 @@ fn setup_dir() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
     debug!("{}", "In debug mode");
 
@@ -44,33 +43,18 @@ fn main() -> anyhow::Result<()> {
 
     setup_dir()?;
 
-    let _visited: Arc<HashSet<String>> = Arc::new(HashSet::new());
-
     let writer_port = 8080;
     let _writer = Writer::new(writer_port, false)?;
 
     let tx1: SyncSender<String> = tx.clone();
 
-    let browser = BrowserController::new(8117)?;
+    let url = format!(
+        "{}:{}/{}/record/{}",
+        BASE_URL, writer_port, ARCHIVE_DIR, "https://archivetheweb.com"
+    );
 
-    thread::spawn(move || {
-        let url = format!(
-            "{}:{}/{}/record/{}",
-            BASE_URL, writer_port, ARCHIVE_DIR, "https://bbc.com"
-        );
-
-        let tab = browser.browse(&url, true);
-        let links = browser
-            .get_links(&tab)
-            .iter()
-            .filter_map(normalize_url(format!("{}:{}", BASE_URL, writer_port)))
-            .collect::<Vec<String>>();
-        println!("{links:?}");
-        let up = Uploader::new();
-        let latest = up.fetch_latest_warc().unwrap();
-        println!("{:?}", latest);
-        tx1.send("done".to_string()).unwrap();
-    });
+    let mut crawler = Crawler::new(&url, 1);
+    crawler.crawl(tx1).await.unwrap();
 
     while !should_terminate.load(Ordering::Relaxed) {
         match rx.try_recv() {
