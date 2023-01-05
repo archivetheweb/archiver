@@ -1,5 +1,6 @@
 #![feature(fs_try_exists)]
 use archivoor_v1::crawler::Crawler;
+use archivoor_v1::uploader::Uploader;
 use archivoor_v1::utils::{ARCHIVE_DIR, BASE_DIR, BASE_URL};
 use archivoor_v1::warc_writer::Writer;
 use log::debug;
@@ -53,8 +54,12 @@ async fn main() -> anyhow::Result<()> {
         BASE_URL, writer_port, ARCHIVE_DIR, "https://archivetheweb.com"
     );
 
-    let mut crawler = Crawler::new(&url, 1);
+    let mut crawler = Crawler::new(&url, 0);
     crawler.crawl(tx1).await.unwrap();
+
+    let u = Uploader::new("./secret.json").await.unwrap();
+
+    u.upload("res/test_wallet.json").await.unwrap();
 
     while !should_terminate.load(Ordering::Relaxed) {
         match rx.try_recv() {
