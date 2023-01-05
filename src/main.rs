@@ -1,8 +1,9 @@
 #![feature(fs_try_exists)]
 use archivoor_v1::browser_controller::BrowserController;
 use archivoor_v1::uploader::Uploader;
-use archivoor_v1::utils::{ARCHIVE_DIR, BASE_DIR};
+use archivoor_v1::utils::{normalize_url, ARCHIVE_DIR, BASE_DIR, BASE_URL};
 use archivoor_v1::warc_writer::Writer;
+use log::debug;
 use signal_hook::consts::{SIGINT, SIGTERM};
 use std::collections::HashSet;
 use std::fs;
@@ -32,6 +33,9 @@ fn setup_dir() -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+    debug!("{}", "In debug mode");
+
     let should_terminate = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
     signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
@@ -42,16 +46,26 @@ fn main() -> anyhow::Result<()> {
 
     let _visited: Arc<HashSet<String>> = Arc::new(HashSet::new());
 
-    let _writer = Writer::new(8080, false)?;
+    let writer_port = 8080;
+    let _writer = Writer::new(writer_port, false)?;
 
     let tx1: SyncSender<String> = tx.clone();
 
     let browser = BrowserController::new(8117)?;
 
     thread::spawn(move || {
-        // TODO crawl logic
-        let tab = browser.browse("https://bbc.com/", true);
-        browser.get_links(&tab);
+        let url = format!(
+            "{}:{}/{}/record/{}",
+            BASE_URL, writer_port, ARCHIVE_DIR, "https://bbc.com"
+        );
+
+        let tab = browser.browse(&url, true);
+        let links = browser
+            .get_links(&tab)
+            .iter()
+            .filter_map(normalize_url(format!("{}:{}", BASE_URL, writer_port)))
+            .collect::<Vec<String>>();
+        println!("{links:?}");
         let up = Uploader::new();
         let latest = up.fetch_latest_warc().unwrap();
         println!("{:?}", latest);
@@ -74,8 +88,8 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    println!("{}", "Terminating...");
+    debug!("{}", "Terminating...");
     // writer.terminate()?;
-    println!("{}", "Child process killed, goodbye");
+    debug!("{}", "Child process killed, goodbye");
     Ok(())
 }

@@ -1,16 +1,13 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use headless_chrome::Tab;
 use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
-use reqwest::Url;
 use std::fs;
 use std::sync::Arc;
 use std::{thread::sleep, time::Duration};
 use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
 
 use crate::utils::{ARCHIVE_DIR, BASE_DIR};
-
-const BASE_URL: &str = "http://localhost:8080";
 
 const SCROLL_JS: &str = r#" new Promise((resolve) => {
     var totalHeight = 0;
@@ -29,7 +26,7 @@ const SCROLL_JS: &str = r#" new Promise((resolve) => {
 });"#;
 
 pub struct BrowserController {
-    port: u16,
+    browser_port: u16,
     browser: Browser,
 }
 
@@ -41,15 +38,18 @@ impl BrowserController {
             .port(Some(port))
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
-        let browser = Browser::new(options)?;
+        let browser = Browser::new(options).context("browser error")?;
 
-        Ok(BrowserController { port, browser })
+        Ok(BrowserController {
+            browser_port: port,
+            browser,
+        })
     }
 
     pub fn browse(&self, url: &str, screenshot: bool) -> Arc<Tab> {
         let tab = self.browser.wait_for_initial_tab().unwrap();
 
-        let url = format!("{}/{}/record/{}", BASE_URL, ARCHIVE_DIR, url);
+        let url = format!("{}", url);
 
         tab.navigate_to(&url)
             .unwrap()
@@ -72,16 +72,19 @@ impl BrowserController {
             .unwrap();
         }
 
-        println!("scrolling....");
+        debug!("scrolling....");
 
-        let r = tab.evaluate(SCROLL_JS, true).unwrap();
+        let _r = tab.evaluate(SCROLL_JS, true).unwrap();
 
-        println!("{:?}", r.description);
+        debug!("waiting for 3 seconds");
 
-        sleep(Duration::from_secs(5));
-        // tx.send("done".to_string()).unwrap();
+        sleep(Duration::from_secs(3));
 
         tab
+    }
+
+    pub fn port(&self) -> u16 {
+        self.browser_port
     }
 
     pub fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
@@ -101,7 +104,6 @@ impl BrowserController {
 
                 None
             })
-            .filter_map(normalize_url(BASE_URL.to_string()))
             .collect::<Vec<String>>();
 
         links
@@ -109,9 +111,9 @@ impl BrowserController {
 
     pub fn kill(&self) -> bool {
         let pid = self.browser.get_process_id().unwrap();
-
         let s = System::new();
         if let Some(process) = s.process(Pid::from_u32(pid)) {
+            debug!("killing process with id {}", pid);
             process.kill();
             return true;
         }
@@ -121,23 +123,7 @@ impl BrowserController {
 
 impl Drop for BrowserController {
     fn drop(&mut self) {
-        println!("killing browser process...");
+        debug!("killing browser process...");
         self.kill();
     }
-}
-
-fn normalize_url(base_url: String) -> Box<dyn Fn(String) -> Option<String>> {
-    return Box::new(move |url| {
-        let new_url = Url::parse(url.as_str());
-        match new_url {
-            Ok(new_url) => Some(new_url.to_string()),
-            Err(_e) => {
-                if url.starts_with('/') {
-                    Some(format!("{}{}", base_url, url))
-                } else {
-                    None
-                }
-            }
-        }
-    });
 }
