@@ -26,24 +26,19 @@ const SCROLL_JS: &str = r#" new Promise((resolve) => {
 });"#;
 
 pub struct BrowserController {
-    browser_port: u16,
     browser: Browser,
 }
 
 impl BrowserController {
-    pub fn new(port: u16) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let options = LaunchOptions::default_builder()
             .path(Some(default_executable().unwrap()))
             .window_size(Some((1920, 1080)))
-            .port(Some(port))
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
         let browser = Browser::new(options).context("browser error")?;
 
-        Ok(BrowserController {
-            browser_port: port,
-            browser,
-        })
+        Ok(BrowserController { browser })
     }
 
     pub fn browse(&self, url: &str, screenshot: bool) -> Arc<Tab> {
@@ -58,6 +53,8 @@ impl BrowserController {
 
         // to do, have a better wait function
         tab.wait_for_element("a").unwrap();
+
+        debug!("sleeping for 1 second");
 
         sleep(Duration::from_secs(1));
 
@@ -76,15 +73,11 @@ impl BrowserController {
 
         let _r = tab.evaluate(SCROLL_JS, true).unwrap();
 
-        debug!("waiting for 3 seconds");
+        debug!("sleeping for 3 seconds");
 
         sleep(Duration::from_secs(3));
 
         tab
-    }
-
-    pub fn port(&self) -> u16 {
-        self.browser_port
     }
 
     pub fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
