@@ -1,26 +1,23 @@
 use std::{
-    fmt::Error,
     fs::{self, DirEntry},
     path::PathBuf,
-    str::FromStr,
 };
 
 use crate::utils::{ARCHIVE_DIR, BASE_DIR};
 use anyhow::anyhow;
-use arloader::{
-    transaction::{Base64, FromUtf8Strs},
-    Arweave,
-};
-use bundlr_sdk::{
-    currency::{arweave::Arweave as Ar, Currency},
-    tags::Tag,
-    ArweaveSigner, Bundlr,
-};
+use bundlr_sdk::{currency::arweave::Arweave as Ar, tags::Tag, Bundlr};
 use reqwest::Url;
+use serde::{Deserialize, Serialize};
 
 pub struct Uploader {
     key_path: PathBuf,
     currency: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct BundlrRes {
+    id: String,
+    timestamp: u64,
 }
 
 const BUNDLR_URL: &str = "https://node1.bundlr.network";
@@ -49,7 +46,7 @@ impl Uploader {
         Ok(latest.unwrap())
     }
 
-    pub async fn upload_latest(&self) -> anyhow::Result<()> {
+    pub async fn upload_latest(&self) -> anyhow::Result<String> {
         let currency = Ar::new(self.key_path.clone(), None);
         let url = Url::parse(BUNDLR_URL).unwrap();
         let bundlr = Bundlr::new(url, &currency).await;
@@ -59,9 +56,11 @@ impl Uploader {
 
         let mut tx = bundlr.create_transaction(data, self.create_tags());
         bundlr.sign_transaction(&mut tx).await?;
-        let res = bundlr.send_transaction(tx).await?;
-        println!("{}", res);
-        Ok(())
+        let value = bundlr.send_transaction(tx).await?;
+        let p: BundlrRes = serde_json::from_value(value).unwrap();
+        println!("{:?}", p);
+
+        Ok(p.id)
     }
 
     fn create_tags(&self) -> Vec<Tag> {

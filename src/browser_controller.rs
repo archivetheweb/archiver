@@ -47,7 +47,8 @@ impl BrowserController {
 
         let url = format!("{}", url);
 
-        tab.navigate_to(&url).unwrap().wait_until_navigated()?;
+        let nv = tab.navigate_to(&url)?;
+        nv.wait_until_navigated()?;
 
         // to do, have a better wait function
         tab.wait_for_element("a")?;

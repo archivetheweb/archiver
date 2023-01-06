@@ -8,4 +8,4 @@ framed_replay: false
 
 recorder:
   source_coll: live
-  filename_template: archivoor-{timestamp}.warc.gz
+  filename_template: archivoor-{timestamp}-{random}.warc.gz

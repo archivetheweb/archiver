@@ -120,7 +120,7 @@ impl Crawler {
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
 
-                        let links = task::spawn_blocking(move || {
+                        let links: Result<_, anyhow::Error> = task::spawn_blocking(move || {
                             let browser = BrowserController::new().unwrap();
 
                             let tab = match browser.browse(&u, true) {
@@ -129,7 +129,9 @@ impl Crawler {
                                     // we decreased the number of browsers working
                                     ac.fetch_sub(1, Ordering::SeqCst);
                                     debug!("error browsing for {}", u);
-                                    return Err(anyhow!("error browsing"));
+                                    // we return an empty link
+                                    // TODO change this
+                                    return Ok(vec![]);
                                 }
                             };
 
