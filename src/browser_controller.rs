@@ -87,18 +87,14 @@ impl BrowserController {
             .iter()
             .map(|x| x.get_attributes().unwrap().unwrap())
             .filter_map(|x| {
-                let mut peekable = x.into_iter().peekable();
-
-                for elem in peekable.next() {
-                    if elem == "href".to_string() {
-                        return peekable.next();
+                for i in 0..x.len() {
+                    if x[i] == "href" {
+                        return Some(x[i + 1].clone());
                     }
                 }
-
                 None
             })
             .collect::<Vec<String>>();
-
         links
     }
 
