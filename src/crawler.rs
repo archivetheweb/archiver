@@ -8,7 +8,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{sync::mpsc, time::sleep};
+use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
@@ -111,18 +111,22 @@ impl Crawler {
                     let ab = active_browsers.clone();
                     let tx = scraped_urls_tx.clone();
                     debug!("browsing {} at depth {}", url, depth);
-
+                    let u = url.clone();
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
-                        let browser = BrowserController::new().unwrap();
 
-                        let tab = browser.browse(&url, true);
-                        let links = browser
-                            .get_links(&tab)
-                            .iter()
-                            .filter_map(normalize_url(format!("{}:{}", BASE_URL, 8080)))
-                            .collect::<Vec<String>>();
-                        debug!("sending new links to thread");
+                        let links = task::spawn_blocking(move || {
+                            let browser = BrowserController::new().unwrap();
+                            let tab = browser.browse(&u, true);
+                            browser
+                                .get_links(&tab)
+                                .iter()
+                                .filter_map(normalize_url(format!("{}:{}", BASE_URL, 8080)))
+                                .collect::<Vec<String>>()
+                        })
+                        .await
+                        .unwrap();
+
                         tx.send((url, links, depth)).await.unwrap();
                         ab.fetch_sub(1, Ordering::SeqCst);
                     }
