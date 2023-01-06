@@ -14,6 +14,7 @@ use crate::{
     browser_controller::BrowserController,
     utils::{normalize_url, BASE_URL},
 };
+use anyhow::anyhow;
 
 pub struct Crawler {
     visited: HashSet<String>,
@@ -87,8 +88,8 @@ impl Crawler {
                 && visit_url_tx.capacity() == 100
                 && active_browsers.load(Ordering::SeqCst) == 0
             {
-                debug!("job is done, breaking");
-                debug!("{active_browsers:?}");
+                debug!("crawl of {} completed successfully", self.url);
+
                 break;
             }
 
@@ -112,6 +113,7 @@ impl Crawler {
                 .for_each_concurrent(3, |queued_url| {
                     let (url, depth) = queued_url.clone();
                     let ab = active_browsers.clone();
+                    let ac = active_browsers.clone();
                     let tx = scraped_urls_tx.clone();
                     debug!("browsing {} at depth {}", url, depth);
                     let u = url.clone();
@@ -120,18 +122,29 @@ impl Crawler {
 
                         let links = task::spawn_blocking(move || {
                             let browser = BrowserController::new().unwrap();
-                            let tab = browser.browse(&u, true);
-                            browser
+
+                            let tab = match browser.browse(&u, true) {
+                                Ok(tab) => tab,
+                                Err(_) => {
+                                    // we decreased the number of browsers working
+                                    ac.fetch_sub(1, Ordering::SeqCst);
+                                    debug!("error browsing for {}", u);
+                                    return Err(anyhow!("error browsing"));
+                                }
+                            };
+
+                            Ok(browser
                                 .get_links(&tab)
                                 .iter()
                                 .filter_map(normalize_url(format!("{}:{}", BASE_URL, 8080)))
-                                .collect::<Vec<String>>()
+                                .collect::<Vec<String>>())
                         })
                         .await
                         .unwrap();
+                        // TODO need to handle this unwrap
                         debug!("sleeping before sending links");
                         sleep(Duration::from_secs(1)).await;
-                        tx.send((url, links, depth)).await.unwrap();
+                        tx.send((url, links.unwrap(), depth)).await.unwrap();
                         ab.fetch_sub(1, Ordering::SeqCst);
                     }
                 })

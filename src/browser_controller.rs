@@ -34,6 +34,7 @@ impl BrowserController {
         let options = LaunchOptions::default_builder()
             .path(Some(default_executable().unwrap()))
             .window_size(Some((1920, 1080)))
+            .idle_browser_timeout(Duration::from_secs(45))
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
         let browser = Browser::new(options).context("browser error")?;
@@ -41,39 +42,34 @@ impl BrowserController {
         Ok(BrowserController { browser })
     }
 
-    pub fn browse(&self, url: &str, screenshot: bool) -> Arc<Tab> {
-        let tab = self.browser.wait_for_initial_tab().unwrap();
+    pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
+        let tab = self.browser.wait_for_initial_tab()?;
 
         let url = format!("{}", url);
 
-        tab.navigate_to(&url)
-            .unwrap()
-            .wait_until_navigated()
-            .unwrap();
+        tab.navigate_to(&url).unwrap().wait_until_navigated()?;
 
         // to do, have a better wait function
-        tab.wait_for_element("a").unwrap();
+        tab.wait_for_element("a")?;
         debug!("sleeping for 1 second");
         sleep(Duration::from_secs(1));
 
         if screenshot {
-            let _png = tab
-                .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)
-                .unwrap();
+            let _png =
+                tab.capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)?;
             fs::write(
                 format!("{}/{}/screenshots/{}.png", BASE_DIR, ARCHIVE_DIR, "a"),
                 _png,
-            )
-            .unwrap();
+            )?;
         }
 
         debug!("scrolling....");
-        let _r = tab.evaluate(SCROLL_JS, true).unwrap();
+        let _r = tab.evaluate(SCROLL_JS, true)?;
         debug!("sleeping for 3 seconds");
 
         sleep(Duration::from_secs(3));
 
-        tab
+        Ok(tab)
     }
 
     pub fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
