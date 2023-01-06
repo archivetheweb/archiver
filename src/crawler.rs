@@ -2,7 +2,7 @@ use futures::StreamExt;
 use std::{
     collections::HashSet,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::SyncSender,
         Arc,
     },
@@ -34,7 +34,11 @@ impl Crawler {
         }
     }
 
-    pub async fn crawl(&mut self, tx: SyncSender<String>) -> anyhow::Result<()> {
+    pub async fn crawl(
+        &mut self,
+        tx: SyncSender<String>,
+        should_terminate: Arc<AtomicBool>,
+    ) -> anyhow::Result<()> {
         // we setup a channel for new url
         // this channel will send an (String, Vec<String>,i32) tuple
         // first element being the url visited, next element being all the new urls and last being the depth of the visited_url
@@ -52,7 +56,7 @@ impl Crawler {
 
         visit_url_tx.send((self.url.clone(), 0)).await.unwrap();
 
-        loop {
+        while !should_terminate.load(Ordering::Relaxed) {
             // we take in new urls
             let res = scraped_urls_rx.try_recv();
 
@@ -105,8 +109,7 @@ impl Crawler {
         debug!("processing....");
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
-                .for_each_concurrent(20, |queued_url| {
-                    println!("running the processor");
+                .for_each_concurrent(3, |queued_url| {
                     let (url, depth) = queued_url.clone();
                     let ab = active_browsers.clone();
                     let tx = scraped_urls_tx.clone();
@@ -126,7 +129,8 @@ impl Crawler {
                         })
                         .await
                         .unwrap();
-
+                        debug!("sleeping before sending links");
+                        sleep(Duration::from_secs(1)).await;
                         tx.send((url, links, depth)).await.unwrap();
                         ab.fetch_sub(1, Ordering::SeqCst);
                     }

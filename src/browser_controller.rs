@@ -53,9 +53,7 @@ impl BrowserController {
 
         // to do, have a better wait function
         tab.wait_for_element("a").unwrap();
-
         debug!("sleeping for 1 second");
-
         sleep(Duration::from_secs(1));
 
         if screenshot {
@@ -70,9 +68,7 @@ impl BrowserController {
         }
 
         debug!("scrolling....");
-
         let _r = tab.evaluate(SCROLL_JS, true).unwrap();
-
         debug!("sleeping for 3 seconds");
 
         sleep(Duration::from_secs(3));

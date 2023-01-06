@@ -45,21 +45,22 @@ async fn main() -> anyhow::Result<()> {
     setup_dir()?;
 
     let writer_port = 8080;
-    let _writer = Writer::new(writer_port, false)?;
-
-    let tx1: SyncSender<String> = tx.clone();
+    let writer = Writer::new(writer_port, false)?;
 
     let url = format!(
         "{}:{}/{}/record/{}",
         BASE_URL, writer_port, ARCHIVE_DIR, "https://archivetheweb.com"
     );
 
-    let mut crawler = Crawler::new(&url, 0);
-    crawler.crawl(tx1).await.unwrap();
+    let mut crawler = Crawler::new(&url, 1);
+    crawler
+        .crawl(tx.clone(), should_terminate.clone())
+        .await
+        .unwrap();
 
-    let u = Uploader::new("./secret.json").await.unwrap();
+    // let u = Uploader::new("./secret.json").await.unwrap();
 
-    u.upload("res/test_wallet.json").await.unwrap();
+    // u.upload("res/test_wallet.json").await.unwrap();
 
     while !should_terminate.load(Ordering::Relaxed) {
         match rx.try_recv() {
@@ -71,14 +72,14 @@ async fn main() -> anyhow::Result<()> {
                 sleep(Duration::from_secs(1));
                 continue;
             }
-            Err(e) => {
-                println!("Error: {:?}", e);
+            Err(TryRecvError::Disconnected) => {
+                break;
             }
         }
     }
 
     debug!("{}", "Terminating...");
-    // writer.terminate()?;
+    writer.terminate()?;
     debug!("{}", "Child process killed, goodbye");
     Ok(())
 }

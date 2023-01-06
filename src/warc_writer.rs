@@ -35,20 +35,18 @@ impl Writer {
 
         let stderr = process.stderr.take().unwrap();
 
-        let res = BufReader::new(stderr).lines();
-
-        let tx1 = tx.clone();
-
         thread::spawn(move || {
+            let res = BufReader::new(stderr).lines();
+            let tx = tx.clone();
             for line in res {
                 if debug {
                     println!("{line:?}");
                 }
                 let l = line.unwrap();
                 if l.contains("Starting Gevent Server on") {
-                    tx1.send("ok".to_string()).unwrap();
+                    tx.send("ok".to_string()).unwrap();
                 } else if l.contains("Traceback") {
-                    tx1.send(l).unwrap();
+                    return;
                 }
             }
         });
