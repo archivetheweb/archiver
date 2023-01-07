@@ -47,20 +47,22 @@ impl Uploader {
     }
 
     pub async fn upload_latest(&self) -> anyhow::Result<String> {
-        let currency = Ar::new(self.key_path.clone(), None);
-        let url = Url::parse(BUNDLR_URL).unwrap();
-        let bundlr = Bundlr::new(url, &currency).await;
+        if self.currency == "arweave" {
+            let currency = Ar::new(self.key_path.clone(), None);
+            let url = Url::parse(BUNDLR_URL).unwrap();
+            let bundlr = Bundlr::new(url, &currency).await;
 
-        let data_path = self.fetch_latest_warc()?.path();
-        let data = fs::read(data_path)?;
+            let data_path = self.fetch_latest_warc()?.path();
+            let data = fs::read(data_path)?;
 
-        let mut tx = bundlr.create_transaction(data, self.create_tags());
-        bundlr.sign_transaction(&mut tx).await?;
-        let value = bundlr.send_transaction(tx).await?;
-        let p: BundlrRes = serde_json::from_value(value).unwrap();
-        println!("{:?}", p);
+            let mut tx = bundlr.create_transaction(data, self.create_tags());
+            bundlr.sign_transaction(&mut tx).await?;
+            let value = bundlr.send_transaction(tx).await?;
+            let p: BundlrRes = serde_json::from_value(value).unwrap();
 
-        Ok(p.id)
+            return Ok(p.id);
+        }
+        Err(anyhow!("not supported yet"))
     }
 
     fn create_tags(&self) -> Vec<Tag> {
