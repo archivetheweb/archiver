@@ -108,7 +108,9 @@ impl Crawler {
                                 *count = *count + 1;
                             }
                             None => {
-                                self.failed.insert(url, 0);
+                                warn!("Retrying url {} at d={}, retried {} so far", url, depth, 0);
+                                self.failed.insert(url.clone(), 0);
+                                visit_url_tx.send((url, depth)).await.unwrap();
                             }
                             _ => {
                                 error!("url {} could not be retrieved", url);
@@ -158,7 +160,10 @@ impl Crawler {
                         ab.fetch_add(1, Ordering::SeqCst);
 
                         let links: Result<_, anyhow::Error> = task::spawn_blocking(move || {
-                            let browser = BrowserController::new().unwrap();
+                            let browser = match BrowserController::new() {
+                                Ok(b) => b,
+                                Err(_) => return Ok((vec![], true)),
+                            };
 
                             let tab = match browser.browse(&u, false) {
                                 Ok(tab) => tab,

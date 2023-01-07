@@ -42,6 +42,7 @@ impl BrowserController {
         Ok(BrowserController { browser })
     }
 
+    // TODO make this async so we can move around threads
     pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
         let tab = self.browser.wait_for_initial_tab()?;
 
@@ -50,12 +51,15 @@ impl BrowserController {
         let nv = tab.navigate_to(&url)?;
         if let Err(e) = nv.wait_until_navigated() {
             // we wait one more timeout
-            debug!("error navigating, retrying {}", e);
+            warn!("error navigating, retrying {}", e);
             nv.wait_until_navigated()?;
         }
 
         // to do, have a better wait function
-        tab.wait_for_element("a")?;
+        if let Err(_) = tab.wait_for_element("a") {
+            warn!("Waiting for a element for url {} is retrying", url);
+            tab.wait_for_element("a")?;
+        };
         debug!("sleeping for 1 second");
         sleep(Duration::from_secs(1));
 
@@ -69,16 +73,29 @@ impl BrowserController {
         }
 
         debug!("scrolling....");
-        let _r = tab.evaluate(SCROLL_JS, true)?;
-        debug!("sleeping for 3 seconds");
+        match tab.evaluate(SCROLL_JS, true) {
+            Ok(_) => {}
+            Err(_) => {
+                // we retry
+                warn!("Scrolling for url {} is retrying", url);
+                tab.evaluate(SCROLL_JS, true)?;
+            }
+        };
 
-        sleep(Duration::from_secs(3));
+        debug!("sleeping for 5 seconds");
+        sleep(Duration::from_secs(5));
 
         Ok(tab)
     }
 
     pub fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
-        let rs = tab.find_elements("a").unwrap();
+        let rs = match tab.find_elements("a") {
+            Ok(elems) => elems,
+            Err(e) => {
+                error!("could not get link for {} with error {}", tab.get_url(), e);
+                vec![]
+            }
+        };
 
         let links = rs
             .iter()
