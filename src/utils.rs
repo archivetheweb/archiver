@@ -26,6 +26,10 @@ pub fn normalize_url(base_url: String) -> Box<dyn Fn(&String) -> Option<String>>
     });
 }
 
+pub fn extract_url(url: String) -> String {
+    url.split("record/").nth(1).unwrap().to_string()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

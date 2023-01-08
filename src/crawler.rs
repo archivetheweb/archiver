@@ -12,7 +12,7 @@ use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
-    utils::{normalize_url, BASE_URL},
+    utils::{extract_url, normalize_url, BASE_URL},
 };
 
 pub struct Crawler {
@@ -125,7 +125,10 @@ impl Crawler {
                 && visit_url_tx.capacity() == 100
                 && active_browsers.load(Ordering::SeqCst) == 0
             {
-                debug!("crawl of {} completed successfully", self.url);
+                debug!(
+                    "crawl of {} completed successfully",
+                    extract_url(self.url.clone())
+                );
 
                 break;
             }
@@ -156,10 +159,26 @@ impl Crawler {
                     let failed_url_tx = failed_url_tx.clone();
                     debug!("browsing {} at depth {}", url, depth);
                     let u = url.clone();
+
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
 
                         let links: Result<_, anyhow::Error> = task::spawn_blocking(move || {
+                            // headless chrome can't handle pdfs, so we make a direct request for it
+                            if u.ends_with(".pdf") {
+                                match reqwest::blocking::get(&u.clone()) {
+                                    Ok(res) => {
+                                        // make sure we read the text
+                                        let _r = res.text();
+                                        return Ok((vec![], false));
+                                    }
+                                    Err(e) => {
+                                        warn!("error downloading pdf err: {}", e);
+                                        return Ok((vec![], true));
+                                    }
+                                }
+                            }
+
                             let browser = match BrowserController::new() {
                                 Ok(b) => b,
                                 Err(_) => return Ok((vec![], true)),
@@ -167,8 +186,8 @@ impl Crawler {
 
                             let tab = match browser.browse(&u, false) {
                                 Ok(tab) => tab,
-                                Err(_) => {
-                                    warn!("error browsing for {}", u);
+                                Err(e) => {
+                                    warn!("error browsing for {} with err {}", u, e);
                                     // we return an empty list of links, and flag as errored out
                                     return Ok((vec![], true));
                                 }

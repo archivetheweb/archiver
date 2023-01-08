@@ -48,12 +48,20 @@ impl BrowserController {
 
         let url = format!("{}", url);
 
-        let nv = tab.navigate_to(&url)?;
+        let nv = match tab.navigate_to(&url) {
+            Ok(t) => t,
+            Err(e) => {
+                error!("could not navigate to {} with error {}", url, e);
+                tab.navigate_to(&url)?
+            }
+        };
         if let Err(e) = nv.wait_until_navigated() {
             // we wait one more timeout
-            warn!("error navigating, retrying {}", e);
+            warn!("error waiting for navigation, retrying {}", e);
             nv.wait_until_navigated()?;
         }
+
+        tab.bring_to_front()?;
 
         // to do, have a better wait function
         if let Err(_) = tab.wait_for_element("a") {
