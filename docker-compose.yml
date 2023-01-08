@@ -1,0 +1,12 @@
+version: "3.9" 
+services:
+  crawler:
+    build: .
+    depends_on:
+      - redis
+    command: tail -f /dev/null
+
+  redis:
+    image: redis
+    ports:
+      - 6379:6379

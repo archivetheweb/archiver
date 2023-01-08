@@ -51,7 +51,7 @@ impl Writer {
             }
         });
 
-        for mess in rx.recv() {
+        while let Ok(mess) = rx.recv() {
             if mess == "ok" {
                 break;
             } else {

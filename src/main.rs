@@ -1,4 +1,3 @@
-#![feature(fs_try_exists)]
 use archivoor_v1::crawler::Crawler;
 use archivoor_v1::uploader::Uploader;
 use archivoor_v1::utils::{ARCHIVE_DIR, BASE_DIR, BASE_URL};
@@ -16,8 +15,7 @@ use std::{
 
 fn setup_dir() -> anyhow::Result<()> {
     // first check if we have a collection with wb-manager
-    let exists = fs::try_exists(format!("./{}/{}", BASE_DIR, ARCHIVE_DIR))?;
-    if !exists {
+    if let Err(_) = fs::read_dir(format!("./{}/{}", BASE_DIR, ARCHIVE_DIR)) {
         let res = Command::new("wb-manager")
             .args(["init", ARCHIVE_DIR])
             .status()?;
@@ -52,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
         BASE_URL, writer_port, ARCHIVE_DIR, "https://archivetheweb.com"
     );
 
-    let mut crawler = Crawler::new(&url, 1, 10, 2);
+    let mut crawler = Crawler::new(&url, 0, 10, 2);
     crawler
         .crawl(tx.clone(), should_terminate.clone())
         .await
