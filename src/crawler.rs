@@ -72,7 +72,7 @@ impl Crawler {
             if res.is_ok() {
                 let (visited_url, new_scraped_urls, depth) = res.unwrap();
                 debug!(
-                    "Adding {} to a visited url at depth {}",
+                    "Adding {} as a visited url at depth {}",
                     &visited_url, depth
                 );
                 self.visited.insert(visited_url);

@@ -26,6 +26,7 @@ impl Writer {
             .args([
                 "--record",
                 "--live",
+                "-a",
                 "-t 8",
                 format!("-p {}", port).as_ref(),
             ])
@@ -44,8 +45,14 @@ impl Writer {
                 }
                 let l = line.unwrap();
                 if l.contains("Starting Gevent Server on") {
+                    debug!("wayback proxy spawned successfully");
                     tx.send("ok".to_string()).unwrap();
-                } else if l.contains("Traceback") {
+                    if !debug {
+                        return;
+                    }
+                } else if l.contains("Traceback") || l.contains("usage: wayback") {
+                    error!("error spawning wayback proxy");
+                    tx.send(l).unwrap();
                     return;
                 }
             }
