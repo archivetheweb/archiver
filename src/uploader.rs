@@ -76,9 +76,13 @@ impl Uploader {
             let metadata = ArfsMetadata {
                 name: name,
                 size: data_len,
-                last_modified_date: get_unix_timestamp(),
+                last_modified_date: SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis(),
                 data_tx_id: file_tx_id.clone(),
                 data_content_type: "application/warc".into(),
+                data_encoding: "gzip".into(),
             };
 
             let mut metadata_tx = bundlr.create_transaction(
@@ -104,17 +108,19 @@ struct ArfsMetadata {
     name: String,
     size: usize,
     #[serde(rename = "lastModifiedDate")]
-    last_modified_date: u64,
+    last_modified_date: u128,
     #[serde(rename = "dataTxId")]
     data_tx_id: String,
     #[serde(rename = "dataContentType")]
     data_content_type: String,
+    #[serde(rename = "dataEncoding")]
+    data_encoding: String,
 }
 
 fn create_file_metadata_tags() -> Vec<Tag> {
     vec![
         Tag::new("ArFS", "0.11"),
-        Tag::new("App-Name", "ArDrive-App"),
+        Tag::new("App-Name", "atw"),
         Tag::new("App-Version", "0.0.1_beta"),
         Tag::new("Content-Type", "application/json"),
         Tag::new("Drive-Id", DRIVE_ID),
@@ -127,7 +133,7 @@ fn create_file_metadata_tags() -> Vec<Tag> {
 
 fn create_file_data_tags() -> Vec<Tag> {
     vec![
-        Tag::new("App-Name", "ArDrive-App"),
+        Tag::new("App-Name", "atw"),
         Tag::new("App-Version", "0.0.1_beta"),
         Tag::new("Content-Type", "application/warc"),
         Tag::new("Content-Encoding", "gzip"),
