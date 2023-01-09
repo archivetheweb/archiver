@@ -25,8 +25,14 @@ impl Writer {
         // flush the redis cache
         let client = redis::Client::open("redis://127.0.0.1/")?;
         let mut con = client.get_connection()?;
-        let _: () = con.del("pywb:archivoor:pending")?;
-        let _: () = con.del("pywb:archivoor:cdxj")?;
+        let pending_index: i32 = con.del("pywb:archivoor:pending")?;
+        let index: i32 = con.del("pywb:archivoor:cdxj")?;
+        if pending_index > 0 {
+            debug!("pending index deleted from redis");
+        }
+        if index > 0 {
+            debug!("index deleted from redis");
+        }
 
         // then run it
         let mut process = Command::new("wayback")
