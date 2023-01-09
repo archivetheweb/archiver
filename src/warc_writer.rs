@@ -3,7 +3,8 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::sync_channel;
 use std::thread;
 use sysinfo::{ProcessExt, System, SystemExt};
-
+extern crate redis;
+use redis::Commands;
 pub struct Writer {
     pub port: u16,
     process: std::process::Child,
@@ -21,12 +22,19 @@ impl Writer {
             process.kill();
         }
 
+        // flush the redis cache
+        let client = redis::Client::open("redis://127.0.0.1/")?;
+        let mut con = client.get_connection()?;
+        let _: () = con.del("pywb:archivoor:pending")?;
+        let _: () = con.del("pywb:archivoor:cdxj")?;
+
         // then run it
         let mut process = Command::new("wayback")
             .args([
                 "--record",
                 "--live",
                 "-a",
+                // "--auto-interval 3",
                 "-t 8",
                 format!("-p {}", port).as_ref(),
             ])

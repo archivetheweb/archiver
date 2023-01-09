@@ -5,8 +5,12 @@ static_path: static
 templates_dir: templates
 
 framed_replay: false
+debug: true
+
+autoindex: 3
 
 recorder:
+  dedup_policy: skip
+  dedup_index_url: "redis://localhost:6379/0/pywb:{coll}:cdxj"
   source_coll: live
-  filename_template: archivoor-{timestamp}-{random}.warc.gz
-  autoindex: 5
+  filename_template: archivoor-{timestamp}-{hostname}-{random}.warc.gz
