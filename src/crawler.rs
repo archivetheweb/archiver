@@ -21,16 +21,12 @@ pub struct Crawler {
     failed: HashMap<String, i32>,
     depth: i32,
     url: Url,
-    concurrent_browsers: usize,
+    concurrent_browsers: i32,
     url_retries: i32,
 }
 
-// the crawler sets up the necessary data types to store the crawl information.
-
-// will say it is done, when done we move on to the next process (compression, arweave deployment etc)
-
 impl Crawler {
-    pub fn new(url: &str, depth: i32, concurrent_browsers: usize, url_retries: i32) -> Crawler {
+    pub fn new(url: &str, depth: i32, concurrent_browsers: i32, url_retries: i32) -> Crawler {
         Crawler {
             visited: HashSet::new(),
             failed: HashMap::new(),
@@ -127,6 +123,7 @@ impl Crawler {
                 && visit_url_tx.capacity() == 100
                 && active_browsers.load(Ordering::SeqCst) == 0
             {
+                // TODO, get the latest file, and rename to the url + timestamp
                 debug!(
                     "crawl of {} completed successfully",
                     extract_url(self.url.clone())
@@ -154,7 +151,7 @@ impl Crawler {
         let concurrency = self.concurrent_browsers;
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
-                .for_each_concurrent(concurrency, |queued_url| {
+                .for_each_concurrent(concurrency as usize, |queued_url| {
                     let (url, depth) = queued_url.clone();
                     let ab = active_browsers.clone();
                     let tx = scraped_urls_tx.clone();
@@ -223,5 +220,9 @@ impl Crawler {
 
             return;
         });
+    }
+
+    pub fn url(&self) -> String {
+        self.url.to_string()
     }
 }
