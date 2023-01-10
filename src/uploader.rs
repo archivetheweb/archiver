@@ -30,12 +30,15 @@ const DRIVE_ID: &str = "b7db009e-dd28-4546-ba5f-d091e09e2d6e";
 const PARENT_FOLDER_ID: &str = "62afa694-5260-4553-bf39-e09c65a52d9d";
 
 impl Uploader {
-    pub async fn new(path: &str, currency: &str) -> anyhow::Result<Self> {
+    pub async fn new(path: PathBuf, currency: &str) -> anyhow::Result<Self> {
         if currency != "arweave" {
             return Err(anyhow!("arweave is the only supported currency"));
         }
+        if let Err(e) = fs::read_dir(&path) {
+            return Err(anyhow!("could not read arweave key path: {}", e));
+        }
         Ok(Uploader {
-            key_path: PathBuf::from(path),
+            key_path: path,
             currency: currency.to_string(),
         })
     }
