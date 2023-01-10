@@ -1,7 +1,5 @@
 use std::{
-    fs,
     path::PathBuf,
-    process::{self, Command},
     sync::{
         mpsc::{sync_channel, TryRecvError},
         Arc,
@@ -13,12 +11,7 @@ use std::{
 
 use signal_hook::consts::{SIGINT, SIGTERM};
 
-use crate::{
-    crawler::Crawler,
-    uploader::Uploader,
-    utils::{ARCHIVE_DIR, BASE_DIR, BASE_URL},
-    warc_writer::WarcWriter,
-};
+use crate::{crawler::Crawler, uploader::Uploader, utils::BASE_URL, warc_writer::WarcWriter};
 
 pub struct Runner {
     uploader: Option<Uploader>,
@@ -29,10 +22,14 @@ pub struct Runner {
 #[derive(Builder, Debug)]
 #[builder(setter(into))]
 pub struct LaunchOptions {
-    #[builder(default = "8080")]
-    writer_port: u16,
+    #[builder(default = "Some(8080)")]
+    writer_port: Option<u16>,
     #[builder(default = "self.default_writer_dir()")]
-    writer_dir: PathBuf,
+    writer_dir: Option<PathBuf>,
+    #[builder(default = "false")]
+    archive_persistence: bool,
+    #[builder(default = "false")]
+    writer_debug: bool,
     #[builder(default = "1")]
     crawl_depth: i32,
     #[builder(default = "5")]
@@ -42,7 +39,7 @@ pub struct LaunchOptions {
     #[builder(default = "self.default_base_url()")]
     base_url: String,
     #[builder(default = "self.default_archive_name()")]
-    archive_name: String,
+    archive_name: Option<String>,
     #[builder(default = "false")]
     with_upload: bool,
     #[builder(default = "self.default_arweave_wallet_dir()")]
@@ -54,29 +51,37 @@ pub struct LaunchOptions {
 impl Default for LaunchOptions {
     fn default() -> Self {
         LaunchOptions {
-            writer_port: 8080,
-            writer_dir: PathBuf::from("."),
+            writer_port: Some(8080),
+            writer_dir: Some(PathBuf::from(".")),
             crawl_depth: 1,
             concurrent_browsers: 5,
             url_retries: 2,
             base_url: BASE_URL.into(),
-            archive_name: "archivoor".into(),
+            archive_name: Some("archivoor".into()),
             with_upload: false,
             arweave_key_dir: PathBuf::from("res/test_wallet.json"),
             currency: "arweave".into(),
+            archive_persistence: false,
+            writer_debug: false,
         }
     }
 }
 
+impl LaunchOptions {
+    pub fn default_builder() -> LaunchOptionsBuilder {
+        LaunchOptionsBuilder::default()
+    }
+}
+
 impl LaunchOptionsBuilder {
-    fn default_archive_name(&self) -> String {
-        String::from("archivoor")
+    fn default_archive_name(&self) -> Option<String> {
+        Some(String::from("archivoor"))
     }
     fn default_base_url(&self) -> String {
         BASE_URL.into()
     }
-    fn default_writer_dir(&self) -> PathBuf {
-        PathBuf::from(format!("./{}/{}", BASE_DIR, ARCHIVE_DIR))
+    fn default_writer_dir(&self) -> Option<PathBuf> {
+        Some(PathBuf::from(format!("")))
     }
     fn default_arweave_wallet_dir(&self) -> PathBuf {
         PathBuf::from("res/test_wallet.json")
@@ -87,18 +92,17 @@ impl LaunchOptionsBuilder {
 }
 
 impl Runner {
-    pub async fn new(launch_options: LaunchOptions) -> anyhow::Result<Self> {
-        setup_dir(&launch_options.writer_dir)?;
+    pub async fn new(lo: LaunchOptions) -> anyhow::Result<Self> {
+        let warc_writer = WarcWriter::new(
+            lo.writer_port,
+            lo.writer_dir.clone(),
+            lo.archive_name.clone(),
+            lo.archive_persistence,
+            lo.writer_debug,
+        )?;
 
-        let writer_port = launch_options.writer_port;
-        let warc_writer = WarcWriter::new(writer_port, true)?;
-
-        let uploader = if launch_options.with_upload {
-            let u = Uploader::new(
-                launch_options.arweave_key_dir.clone(),
-                &launch_options.currency,
-            )
-            .await?;
+        let uploader = if lo.with_upload {
+            let u = Uploader::new(lo.arweave_key_dir.clone(), &lo.currency).await?;
             Some(u)
         } else {
             None
@@ -107,14 +111,17 @@ impl Runner {
         Ok(Runner {
             uploader,
             warc_writer,
-            options: launch_options,
+            options: lo,
         })
     }
 
-    pub async fn run(mut self, url: &str) -> anyhow::Result<()> {
+    pub async fn run(&self, url: &str) -> anyhow::Result<()> {
         let url = format!(
             "{}:{}/{}/record/{}",
-            self.options.base_url, self.options.writer_port, self.options.archive_name, url
+            self.options.base_url,
+            self.warc_writer.port(),
+            self.warc_writer.archive_name(),
+            url
         );
 
         let should_terminate = Arc::new(AtomicBool::new(false));
@@ -132,7 +139,7 @@ impl Runner {
         crawler.crawl(tx.clone(), should_terminate.clone()).await?;
 
         if self.options.with_upload {
-            match self.uploader {
+            match &self.uploader {
                 Some(u) => {
                     if !should_terminate.load(Ordering::Relaxed) {
                         let id = u.upload_latest().await?;
@@ -164,28 +171,14 @@ impl Runner {
             }
         }
 
-        debug!("{}", "Terminating...");
-        self.warc_writer.terminate()?;
-        debug!("{}", "Child process killed, goodbye");
-
         Ok(())
     }
 }
 
-fn setup_dir(work_dir: &PathBuf) -> anyhow::Result<()> {
-    // first check if we have a collection with wb-manager
-    if let Err(_) = fs::read_dir(work_dir) {
-        let res = Command::new("wb-manager")
-            .args(["init", ARCHIVE_DIR])
-            .status()?;
-
-        if !res.success() {
-            process::exit(res.code().unwrap());
-        }
-        let mut new_dir = work_dir.clone();
-        new_dir.push("screenshots");
-
-        fs::create_dir(new_dir)?;
+impl Drop for Runner {
+    fn drop(&mut self) {
+        debug!("{}", "Terminating runner...");
+        self.warc_writer.terminate().unwrap();
+        debug!("{}", "Child process killed, goodbye");
     }
-    Ok(())
 }

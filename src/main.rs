@@ -1,4 +1,4 @@
-use archivoor_v1::runner::{LaunchOptionsBuilder, Runner};
+use archivoor_v1::runner::{LaunchOptions, Runner};
 use log::debug;
 
 #[tokio::main]
@@ -6,7 +6,13 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init();
     debug!("{}", "In debug mode");
 
-    let options = LaunchOptionsBuilder::default().with_upload(true).build()?;
+    let options = LaunchOptions::default_builder()
+        .with_upload(false)
+        .writer_dir(Some(".".into()))
+        .writer_port(None)
+        .archive_name(None)
+        .crawl_depth(1)
+        .build()?;
 
     debug!("Launching app with options: \n {:#?}", options);
 
