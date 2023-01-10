@@ -5,13 +5,13 @@ use std::thread;
 use sysinfo::{ProcessExt, System, SystemExt};
 extern crate redis;
 use redis::Commands;
-pub struct Writer {
-    pub port: u16,
+pub struct WarcWriter {
+    port: u16,
     process: std::process::Child,
 }
 
 // Currently we use the wayback process to create our WARC file
-impl Writer {
+impl WarcWriter {
     pub fn new(port: u16, debug: bool) -> anyhow::Result<Self> {
         let (tx, rx) = sync_channel(1);
 
@@ -39,8 +39,6 @@ impl Writer {
             .args([
                 "--record",
                 "--live",
-                "-a",
-                // "--auto-interval 3",
                 "-t 8",
                 format!("-p {}", port).as_ref(),
             ])
@@ -66,7 +64,12 @@ impl Writer {
                     }
                 } else if l.contains("Traceback") || l.contains("usage: wayback") {
                     error!("error spawning wayback proxy");
-                    tx.send(l).unwrap();
+                    match tx.send(l) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!("error sending message to wayback thread: {}", e)
+                        }
+                    }
                     return;
                 }
             }
@@ -81,10 +84,15 @@ impl Writer {
             }
         }
 
-        Ok(Writer { port, process })
+        Ok(WarcWriter { port, process })
     }
 
-    pub fn terminate(mut self) -> anyhow::Result<()> {
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn terminate(&mut self) -> anyhow::Result<()> {
+        debug!("Killing warc writer process with id {}", self.process.id());
         self.process.kill()?;
         Ok(())
     }
