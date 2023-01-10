@@ -34,8 +34,12 @@ impl Uploader {
         if currency != "arweave" {
             return Err(anyhow!("arweave is the only supported currency"));
         }
-        if let Err(e) = fs::read_dir(&path) {
-            return Err(anyhow!("could not read arweave key path: {}", e));
+
+        if !path.exists() {
+            return Err(anyhow!(
+                "could not read arweave key path: {}",
+                path.to_str().unwrap()
+            ));
         }
         Ok(Uploader {
             key_path: path,
