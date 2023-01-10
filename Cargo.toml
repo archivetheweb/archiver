@@ -27,3 +27,4 @@ redis = "0.22.2"
 uuid = { version = "1.2.2", features = ["v4"] }
 sha2 = "0.10.6"
 base64 = "0.21.0"
+derive_builder = "0.12.0"
