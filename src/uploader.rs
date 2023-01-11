@@ -5,7 +5,6 @@ use std::{
     time::SystemTime,
 };
 
-use crate::utils::{ARCHIVE_DIR, BASE_DIR};
 use anyhow::anyhow;
 use base64::{engine::general_purpose, Engine as _};
 use bundlr_sdk::{currency::arweave::Arweave as Ar, tags::Tag, Bundlr};
@@ -30,48 +29,76 @@ const DRIVE_ID: &str = "b7db009e-dd28-4546-ba5f-d091e09e2d6e";
 const PARENT_FOLDER_ID: &str = "62afa694-5260-4553-bf39-e09c65a52d9d";
 
 impl Uploader {
-    pub async fn new(path: PathBuf, currency: &str) -> anyhow::Result<Self> {
+    pub async fn new(key_path: PathBuf, currency: &str) -> anyhow::Result<Self> {
         if currency != "arweave" {
             return Err(anyhow!("arweave is the only supported currency"));
         }
 
-        if !path.exists() {
+        if !key_path.exists() {
             return Err(anyhow!(
                 "could not read arweave key path: {}",
-                path.to_str().unwrap()
+                key_path.to_str().unwrap()
             ));
         }
+
         Ok(Uploader {
-            key_path: path,
+            key_path,
             currency: currency.to_string(),
         })
     }
-    pub fn fetch_latest_warc(&self) -> anyhow::Result<(String, PathBuf)> {
-        let dir = fs::read_dir(format!("./{}/{}/archive", BASE_DIR, ARCHIVE_DIR))?;
 
-        let latest = dir.into_iter().map(|x| x.unwrap()).max_by_key(|x| {
+    pub fn fetch_latest_warc(&self, directory: &PathBuf) -> anyhow::Result<PathBuf> {
+        let dir = fs::read_dir(directory)?;
+        let Some(latest) = dir.into_iter().filter_map(|x| {
+            match x {
+                Ok(x) => {
+                    if x.file_name().to_str().unwrap().contains("<unprocessed>") {
+                        return None
+                    }
+                    Some(x)
+                }
+                Err(e)=>{
+                    error!("could not filter map for fetch_latest_warc {}", e);
+                    None
+                }
+            }
+        }).max_by_key(|x| {
             let file = x.file_name();
 
             let elems: Vec<&str> = file.to_str().unwrap().trim().split("-").collect();
 
-            elems[1].parse::<u128>().unwrap()
-        });
-
-        let latest = latest.unwrap();
-        let name = latest.file_name();
-        let name = name.to_str().unwrap();
-        let path = latest.path();
-
-        Ok((String::from(name), path))
+            match elems[1].parse::<u128>() {
+                Ok(ts) => ts,
+                Err(_) => 0
+            }
+        }) else {
+            return Err(anyhow!("problem reading the directory {:?}", directory));
+        };
+        Ok(latest.path())
     }
 
-    pub async fn upload_latest(&self) -> anyhow::Result<(String, String)> {
+    pub async fn upload_latest_file(
+        &self,
+        directory: &PathBuf,
+    ) -> anyhow::Result<(String, String)> {
+        // get the latest file
+        let latest_file_path = self.fetch_latest_warc(directory)?;
+        self.upload(&latest_file_path).await
+    }
+
+    // TODO
+    // pub async fn upload_dir()
+
+    pub async fn upload(&self, file_path: &PathBuf) -> anyhow::Result<(String, String)> {
         if self.currency == "arweave" {
             let currency = Ar::new(self.key_path.clone(), None);
             let bundlr = Bundlr::new(Url::parse(BUNDLR_URL).unwrap(), &currency).await;
 
-            let (name, path) = self.fetch_latest_warc()?;
-            let data = fs::read(path)?;
+            let data = fs::read(file_path)?;
+            let name = match file_path.file_name() {
+                Some(n) => n.to_str().unwrap(),
+                None => return Err(anyhow!("invalid file path {:?}", file_path)),
+            };
             let data_len = data.len();
 
             // first we deploy the file data
@@ -81,7 +108,7 @@ impl Uploader {
             let file_tx_id = get_bundle_id(file_tx.get_signarure());
 
             let metadata = ArfsMetadata {
-                name: name,
+                name: name.into(),
                 size: data_len,
                 last_modified_date: SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)

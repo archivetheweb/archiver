@@ -1,7 +1,7 @@
 use rand::seq::SliceRandom;
 use std::{
     ffi::OsStr,
-    fs,
+    fs::{self, DirEntry},
     io::{BufRead, BufReader},
     net,
     path::PathBuf,
@@ -9,13 +9,14 @@ use std::{
     sync::mpsc::sync_channel,
     thread::{self},
 };
+use urlencoding::encode;
 extern crate redis;
 use rand::{thread_rng, Rng};
 use redis::Commands;
 pub struct WarcWriter {
     port: u16,
     process: std::process::Child,
-    writer_dir: PathBuf,
+    archive_dir: PathBuf,
     archive_name: String,
     persistent: bool,
 }
@@ -26,7 +27,7 @@ impl WarcWriter {
     //
     pub fn new(
         port: Option<u16>,
-        writer_dir: Option<PathBuf>,
+        parent_dir: Option<PathBuf>,
         archive_name: Option<String>,
         persistent: bool,
         debug: bool,
@@ -41,7 +42,7 @@ impl WarcWriter {
         };
 
         // first we check if we have the write folder structure
-        let writer_dir = if let Some(dir) = writer_dir {
+        let parent_dir = if let Some(dir) = parent_dir {
             debug!("writer directory chosen {:?}", dir);
             dir
         } else {
@@ -50,9 +51,9 @@ impl WarcWriter {
             d
         };
 
-        init_wayback_config(&writer_dir)?;
+        init_wayback_config(&parent_dir)?;
 
-        setup_dir(&archive_name, &writer_dir)?;
+        setup_dir(&archive_name, &parent_dir)?;
 
         let (tx, rx) = sync_channel(1);
 
@@ -70,10 +71,10 @@ impl WarcWriter {
             "-t 8".into(),
             format!("-p {}", port),
         ];
-        debug!("{}", writer_dir.as_os_str().to_str().unwrap());
-        let dir_str = writer_dir.as_os_str();
+        debug!("{}", parent_dir.as_os_str().to_str().unwrap());
+        let dir_str = parent_dir.as_os_str();
         if dir_str != OsStr::new("") && dir_str != OsStr::new(".") {
-            args.push(format!("-d{}", writer_dir.as_os_str().to_str().unwrap()));
+            args.push(format!("-d{}", parent_dir.as_os_str().to_str().unwrap()));
         }
 
         debug!("running wayback process with args: {:#?}", args);
@@ -121,10 +122,15 @@ impl WarcWriter {
             }
         }
 
+        let mut archive_dir = parent_dir.clone();
+        archive_dir.push("collections");
+        archive_dir.push(archive_name.clone());
+        archive_dir.push("archive");
+
         Ok(WarcWriter {
             port,
             process,
-            writer_dir,
+            archive_dir,
             archive_name,
             persistent,
         })
@@ -134,17 +140,69 @@ impl WarcWriter {
         self.port
     }
 
-    pub fn writer_dir(&self) -> PathBuf {
-        self.writer_dir.clone()
+    pub fn archive_dir(&self) -> PathBuf {
+        self.archive_dir.clone()
     }
 
     pub fn archive_name(&self) -> String {
         self.archive_name.clone()
     }
 
+    fn fetch_all_warcs(&self) -> anyhow::Result<Vec<DirEntry>> {
+        let dir = fs::read_dir(self.archive_dir())?;
+
+        let dir: Vec<DirEntry> = dir
+            .into_iter()
+            .filter_map(|x| match x {
+                Ok(x) => {
+                    if x.file_name().to_str().unwrap().contains(".warc") {
+                        return Some(x);
+                    } else {
+                        return None;
+                    }
+                }
+                Err(e) => {
+                    error!("error reading warcs dir {}", e);
+                    None
+                }
+            })
+            .collect();
+        Ok(dir)
+    }
+
+    pub fn rename_files(&self, new_name: &str) -> anyhow::Result<()> {
+        let warcs = self.fetch_all_warcs()?;
+
+        warcs.iter().for_each(|x| {
+            let file_name = x.file_name();
+            let file_name = file_name.to_str().unwrap();
+            if file_name.contains("<unprocessed>") {
+                let name_elems: Vec<&str> = file_name.trim().split("-").collect();
+                let new_full_name =
+                    format!("archivoor-{}-{}.warc.gz", name_elems[2], encode(new_name));
+                let mut new_path = x.path().clone();
+                new_path.pop();
+                new_path.push(&new_full_name);
+                match fs::rename(x.path(), new_path) {
+                    Ok(_) => {
+                        debug!("renamed {} to {}", file_name, new_full_name)
+                    }
+                    Err(e) => {
+                        error!("could not rename {} with err: {}", file_name, e)
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    // TODO
+    // pub fn create_index()
+
     pub fn terminate(&mut self) -> anyhow::Result<()> {
         if !self.persistent {
-            // let mut d = self.writer_dir.clone();
+            // let mut d = self.parent_dir.clone();
             // d.push("collections");
             // debug!("{}", d.as_os_str().to_str().unwrap());
             // for entry in fs::read_dir(&d)? {
@@ -201,14 +259,14 @@ fn port_is_available(port: u16) -> bool {
     net::TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
-fn setup_dir(archive_name: &str, writer_dir: &PathBuf) -> anyhow::Result<()> {
+fn setup_dir(archive_name: &str, parent_dir: &PathBuf) -> anyhow::Result<()> {
     // first check if we have a collection with wb-manager
-    let mut dir = writer_dir.clone();
+    let mut dir = parent_dir.clone();
     dir.push("collections");
     dir.push(&archive_name);
     if !dir.exists() {
         let res = Command::new("wb-manager")
-            .current_dir(writer_dir)
+            .current_dir(parent_dir)
             .args(["init", archive_name])
             .status()?;
 
@@ -246,7 +304,7 @@ fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
       dedup_policy: skip
       dedup_index_url: "redis://localhost:6379/0/pywb:{coll}:cdxj"
       source_coll: live
-      filename_template: archivoor-{timestamp}-{hostname}-{random}.warc.gz
+      filename_template: <unprocessed>-archivoor-{timestamp}-{random}.warc.gz
     "#;
 
     let mut p = path.clone();

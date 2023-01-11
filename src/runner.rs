@@ -9,6 +9,8 @@ use std::{
     time::Duration,
 };
 
+use anyhow::anyhow;
+use reqwest::Url;
 use signal_hook::consts::{SIGINT, SIGTERM};
 
 use crate::{crawler::Crawler, uploader::Uploader, utils::BASE_URL, warc_writer::WarcWriter};
@@ -115,13 +117,17 @@ impl Runner {
         })
     }
 
-    pub async fn run(&self, url: &str) -> anyhow::Result<()> {
-        let url = format!(
+    pub async fn run(&self, url: &Url) -> anyhow::Result<()> {
+        let domain = match url.domain() {
+            Some(d) => d,
+            None => return Err(anyhow!("url must have a valid domain")),
+        };
+        let u = format!(
             "{}:{}/{}/record/{}",
             self.options.base_url,
             self.warc_writer.port(),
             self.warc_writer.archive_name(),
-            url
+            url.to_string()
         );
 
         let should_terminate = Arc::new(AtomicBool::new(false));
@@ -130,19 +136,31 @@ impl Runner {
 
         let (tx, rx) = sync_channel::<String>(1);
 
+        info!(
+            "Initializing crawl of {} with depth {}, {} browsers, {} retries.",
+            url,
+            self.options.crawl_depth,
+            self.options.concurrent_browsers,
+            self.options.url_retries
+        );
         let mut crawler = Crawler::new(
-            &url,
+            &u,
             self.options.crawl_depth,
             self.options.concurrent_browsers,
             self.options.url_retries,
         );
         crawler.crawl(tx.clone(), should_terminate.clone()).await?;
 
+        // we rename the files that the warc writer created for easy retrieval
+        self.warc_writer.rename_files(domain)?;
+
         if self.options.with_upload {
             match &self.uploader {
                 Some(u) => {
                     if !should_terminate.load(Ordering::Relaxed) {
-                        let id = u.upload_latest().await?;
+                        let id = u
+                            .upload_latest_file(&self.warc_writer.archive_dir())
+                            .await?;
                         println!(
                             "ids of the tx are \n File Tx: {} \n Metadata tx: {}",
                             id.0, id.1
