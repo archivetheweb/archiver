@@ -11,8 +11,10 @@ use std::{
 };
 use urlencoding::encode;
 extern crate redis;
+use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use redis::Commands;
+
 pub struct WarcWriter {
     port: u16,
     process: std::process::Child,
@@ -20,11 +22,9 @@ pub struct WarcWriter {
     archive_name: String,
     persistent: bool,
 }
-use rand::distributions::Alphanumeric;
 
 // Currently we use the wayback process to create our WARC file
 impl WarcWriter {
-    //
     pub fn new(
         port: Option<u16>,
         parent_dir: Option<PathBuf>,
@@ -201,6 +201,7 @@ impl WarcWriter {
     // pub fn create_index()
 
     pub fn terminate(&mut self) -> anyhow::Result<()> {
+        // TODO
         if !self.persistent {
             // let mut d = self.parent_dir.clone();
             // d.push("collections");
