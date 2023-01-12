@@ -9,3 +9,5 @@ pub mod runner;
 pub mod uploader;
 pub mod utils;
 pub mod warc_writer;
+pub mod warp_dre;
+pub mod warp_dre_types;
