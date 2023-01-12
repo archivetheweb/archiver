@@ -1,10 +1,8 @@
+use derive_builder::Builder;
 use reqwest::{Client, Url};
-use std::{
-    collections::{HashMap, HashSet},
-    str::FromStr,
-};
+use std::{collections::HashMap, str::FromStr};
 
-use crate::warp_dre_types::{BlacklistItem, Cached, ErrorsItem, Status};
+use crate::types::{BlacklistItem, Cached, ErrorsItem, Status};
 pub struct WarpDRE {
     client: Client,
     url: Url,
