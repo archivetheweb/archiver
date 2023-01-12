@@ -1,5 +1,6 @@
 use std::{
     path::PathBuf,
+    str::FromStr,
     sync::{
         mpsc::{sync_channel, TryRecvError},
         Arc,
@@ -117,17 +118,19 @@ impl Runner {
         })
     }
 
-    pub async fn run(&self, url: &Url) -> anyhow::Result<()> {
-        let domain = match url.domain() {
+    pub async fn run(&self, url: &str) -> anyhow::Result<()> {
+        let u = Url::from_str(url)?;
+        let domain = match u.domain() {
             Some(d) => d,
             None => return Err(anyhow!("url must have a valid domain")),
         };
-        let u = format!(
-            "{}:{}/{}/record/{}",
-            self.options.base_url,
-            self.warc_writer.port(),
+        let base_url = &format!("{}:{}", self.options.base_url, self.warc_writer.port());
+
+        let full_url = &format!(
+            "{}/{}/record/{}",
+            base_url,
             self.warc_writer.archive_name(),
-            url.to_string()
+            url
         );
 
         let should_terminate = Arc::new(AtomicBool::new(false));
@@ -144,7 +147,8 @@ impl Runner {
             self.options.url_retries
         );
         let mut crawler = Crawler::new(
-            &u,
+            base_url,
+            full_url,
             self.options.crawl_depth,
             self.options.concurrent_browsers,
             self.options.url_retries,
@@ -152,7 +156,8 @@ impl Runner {
         crawler.crawl(tx.clone(), should_terminate.clone()).await?;
 
         // we rename the files that the warc writer created for easy retrieval
-        self.warc_writer.rename_files(domain)?;
+        self.warc_writer
+            .rename_files(domain, self.options.crawl_depth)?;
 
         if self.options.with_upload {
             match &self.uploader {

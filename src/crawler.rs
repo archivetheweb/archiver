@@ -13,25 +13,33 @@ use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
-    utils::{extract_url, normalize_url, normalize_url_map, BASE_URL},
+    utils::{extract_url, normalize_url_map},
 };
 
 pub struct Crawler {
     visited: HashSet<String>,
     failed: HashMap<String, i32>,
     depth: i32,
-    url: Url,
+    base_url: String,
+    url: String,
     concurrent_browsers: i32,
     url_retries: i32,
 }
 
 impl Crawler {
-    pub fn new(url: &str, depth: i32, concurrent_browsers: i32, url_retries: i32) -> Crawler {
+    pub fn new(
+        base_url: &str,
+        url: &str,
+        depth: i32,
+        concurrent_browsers: i32,
+        url_retries: i32,
+    ) -> Crawler {
         Crawler {
             visited: HashSet::new(),
             failed: HashMap::new(),
+            base_url: base_url.into(),
             depth,
-            url: normalize_url(BASE_URL, &url.to_string()).unwrap(),
+            url: url.into(),
             concurrent_browsers,
             url_retries,
         }
@@ -45,9 +53,10 @@ impl Crawler {
         // we setup a channel for new url
         // this channel will send an (String, Vec<String>,i32) tuple
         // first element being the url visited, next element being all the new urls and last being the depth of the visited_url
-        let (scraped_urls_tx, mut scraped_urls_rx) = mpsc::channel::<(Url, Vec<Url>, i32)>(100);
-        let (visit_url_tx, visit_url_rx) = mpsc::channel::<(Url, i32)>(100);
-        let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(Url, i32)>(100);
+        let (scraped_urls_tx, mut scraped_urls_rx) =
+            mpsc::channel::<(String, Vec<String>, i32)>(100);
+        let (visit_url_tx, visit_url_rx) = mpsc::channel::<(String, i32)>(100);
+        let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(String, i32)>(100);
 
         let active_browsers = Arc::new(AtomicUsize::new(0));
 
@@ -72,13 +81,11 @@ impl Crawler {
                     &visited_url, depth
                 );
                 self.visited.insert(visited_url.to_string());
-                let new_urls: HashSet<String> =
-                    HashSet::from_iter(new_scraped_urls.into_iter().map(|u| u.to_string()));
+                let new_urls: HashSet<String> = HashSet::from_iter(new_scraped_urls);
                 for new_url in new_urls.iter() {
                     if !self.visited.contains(new_url) && depth < self.depth {
                         debug!("Adding {} to the queue", &new_url);
-                        let new_url = Url::parse(new_url).unwrap();
-                        let _ = visit_url_tx.send((new_url, depth + 1)).await;
+                        let _ = visit_url_tx.send((new_url.to_string(), depth + 1)).await;
                     }
                 }
             } else {
@@ -123,8 +130,28 @@ impl Crawler {
                 && visit_url_tx.capacity() == 100
                 && active_browsers.load(Ordering::SeqCst) == 0
             {
-                // TODO, get the latest file, and rename to the url + timestamp
+                let failed = self
+                    .failed
+                    .iter()
+                    .filter_map(|x| {
+                        if x.1 >= &self.url_retries {
+                            return Some(x.0.to_owned());
+                        }
+                        None
+                    })
+                    .collect::<Vec<String>>();
+
                 debug!(
+                    "Total of {} sites crawled, {} failed",
+                    self.visited.len(),
+                    failed.len()
+                );
+
+                if failed.len() > 0 {
+                    debug!("Failed urls: {:#?}", failed);
+                }
+
+                info!(
                     "crawl of {} completed successfully",
                     extract_url(self.url.clone())
                 );
@@ -142,13 +169,14 @@ impl Crawler {
 
     fn processor(
         &self,
-        scraped_urls_tx: mpsc::Sender<(Url, Vec<Url>, i32)>,
-        visit_url_rx: mpsc::Receiver<(Url, i32)>,
-        failed_url_tx: mpsc::Sender<(Url, i32)>,
+        scraped_urls_tx: mpsc::Sender<(String, Vec<String>, i32)>,
+        visit_url_rx: mpsc::Receiver<(String, i32)>,
+        failed_url_tx: mpsc::Sender<(String, i32)>,
         active_browsers: Arc<AtomicUsize>,
     ) {
         debug!("processing....");
         let concurrency = self.concurrent_browsers;
+        let base_url = self.base_url.clone();
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
                 .for_each_concurrent(concurrency as usize, |queued_url| {
@@ -158,7 +186,7 @@ impl Crawler {
                     let failed_url_tx = failed_url_tx.clone();
                     debug!("browsing {} at depth {}", url, depth);
                     let u = url.clone();
-
+                    let base_url = base_url.clone();
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
 
@@ -169,6 +197,7 @@ impl Crawler {
                                 match reqwest::blocking::get(u.as_str()) {
                                     Ok(res) => {
                                         // make sure we read the text
+                                        debug!("fetching pdf at {}", u.as_str());
                                         let _r = res.text();
                                         return Ok((vec![], false));
                                     }
@@ -197,8 +226,8 @@ impl Crawler {
                                 browser
                                     .get_links(&tab)
                                     .iter()
-                                    .filter_map(normalize_url_map(format!("{}:{}", BASE_URL, 8080)))
-                                    .collect::<Vec<Url>>(),
+                                    .filter_map(normalize_url_map(base_url.into()))
+                                    .collect::<Vec<String>>(),
                                 false,
                             ))
                         })

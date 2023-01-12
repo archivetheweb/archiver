@@ -4,23 +4,23 @@ pub const ARCHIVE_DIR: &str = "archivoor";
 pub const BASE_DIR: &str = "collections";
 pub const BASE_URL: &str = "http://localhost";
 
-pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<Url>> {
+pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<String>> {
     return Box::new(move |url| normalize_url(&base_url, url));
 }
 
-pub fn normalize_url(base_url: &str, url: &String) -> Option<Url> {
+pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
     let new_url = Url::parse(url.as_str());
     match new_url {
         Ok(mut new_url) => {
             // we remove the fragments (#)
             new_url.set_fragment(None);
-            Some(new_url)
+            Some(new_url.to_string())
         }
         Err(_e) => {
             if url.starts_with('/') {
                 let mut u = Url::parse(format!("{}{}", base_url, url).as_str()).unwrap();
                 u.set_fragment(None);
-                Some(u)
+                Some(u.to_string())
             } else {
                 None
             }
@@ -28,8 +28,8 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<Url> {
     }
 }
 
-pub fn extract_url(url: Url) -> String {
-    url.as_str().split("record/").nth(1).unwrap().to_string()
+pub fn extract_url(url: String) -> String {
+    url.split("record/").nth(1).unwrap().to_string()
 }
 
 #[cfg(test)]
