@@ -51,25 +51,6 @@ pub struct LaunchOptions {
     currency: String,
 }
 
-impl Default for LaunchOptions {
-    fn default() -> Self {
-        LaunchOptions {
-            writer_port: Some(8080),
-            writer_dir: Some(PathBuf::from(".")),
-            crawl_depth: 1,
-            concurrent_browsers: 5,
-            url_retries: 2,
-            base_url: BASE_URL.into(),
-            archive_name: Some("archivoor".into()),
-            with_upload: false,
-            arweave_key_dir: PathBuf::from("res/test_wallet.json"),
-            currency: "arweave".into(),
-            archive_persistence: false,
-            writer_debug: false,
-        }
-    }
-}
-
 impl LaunchOptions {
     pub fn default_builder() -> LaunchOptionsBuilder {
         LaunchOptionsBuilder::default()
