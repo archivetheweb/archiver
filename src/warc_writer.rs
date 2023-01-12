@@ -11,9 +11,11 @@ use std::{
 };
 use urlencoding::encode;
 extern crate redis;
+use anyhow::anyhow;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use redis::Commands;
+use sysinfo::{PidExt, System, SystemExt};
 
 pub struct WarcWriter {
     port: u16,
@@ -122,6 +124,11 @@ impl WarcWriter {
             }
         }
 
+        let s = System::new_all();
+        if let None = s.process(PidExt::from_u32(process.id())) {
+            return Err(anyhow!("Wayback error: process is not running"));
+        }
+
         let mut archive_dir = parent_dir.clone();
         archive_dir.push("collections");
         archive_dir.push(archive_name.clone());
@@ -170,7 +177,7 @@ impl WarcWriter {
         Ok(dir)
     }
 
-    pub fn rename_files(&self, new_name: &str) -> anyhow::Result<()> {
+    pub fn rename_files(&self, new_name: &str, depth: i32) -> anyhow::Result<()> {
         let warcs = self.fetch_all_warcs()?;
 
         warcs.iter().for_each(|x| {
@@ -178,8 +185,13 @@ impl WarcWriter {
             let file_name = file_name.to_str().unwrap();
             if file_name.contains("<unprocessed>") {
                 let name_elems: Vec<&str> = file_name.trim().split("-").collect();
-                let new_full_name =
-                    format!("archivoor-{}-{}.warc.gz", name_elems[2], encode(new_name));
+                // the name matters as we will be using it to
+                let new_full_name = format!(
+                    "archivoor-{}-{}-{}.warc.gz",
+                    name_elems[2],
+                    encode(new_name),
+                    depth
+                );
                 let mut new_path = x.path().clone();
                 new_path.pop();
                 new_path.push(&new_full_name);
