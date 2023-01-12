@@ -187,7 +187,7 @@ impl WarcWriter {
                 let name_elems: Vec<&str> = file_name.trim().split("-").collect();
                 // the name matters as we will be using it to
                 let new_full_name = format!(
-                    "archivoor-{}-{}-{}.warc.gz",
+                    "archivoor_{}_{}_{}.warc.gz",
                     name_elems[2],
                     encode(new_name),
                     depth

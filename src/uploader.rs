@@ -99,10 +99,16 @@ impl Uploader {
                 Some(n) => n.to_str().unwrap(),
                 None => return Err(anyhow!("invalid file path {:?}", file_path)),
             };
+            //archivoor_<ts>_<url>_<depth>.warc.gz
+            let elems = name.split("_").collect::<Vec<&str>>();
+            let ts = elems[1];
+            let url = elems[2];
+            let depth = elems[3];
             let data_len = data.len();
 
             // first we deploy the file data
-            let mut file_tx = bundlr.create_transaction(data, create_file_data_tags());
+            let mut file_tx =
+                bundlr.create_transaction(data, create_file_data_tags(url, ts, depth));
             bundlr.sign_transaction(&mut file_tx).await?;
 
             let file_tx_id = get_bundle_id(file_tx.get_signarure());
@@ -121,7 +127,7 @@ impl Uploader {
 
             let mut metadata_tx = bundlr.create_transaction(
                 serde_json::to_vec(&metadata).unwrap(),
-                create_file_metadata_tags(),
+                create_file_metadata_tags(url, ts, depth),
             );
             bundlr.sign_transaction(&mut metadata_tx).await?;
 
@@ -151,10 +157,10 @@ struct ArfsMetadata {
     data_encoding: String,
 }
 
-fn create_file_metadata_tags() -> Vec<Tag> {
+fn create_file_metadata_tags(url: &str, timestamp: &str, depth: &str) -> Vec<Tag> {
     vec![
+        // Ardrive FS tags
         Tag::new("ArFS", "0.11"),
-        Tag::new("App-Name", "atw"),
         Tag::new("App-Version", "0.0.1_beta"),
         Tag::new("Content-Type", "application/json"),
         Tag::new("Drive-Id", DRIVE_ID),
@@ -162,15 +168,25 @@ fn create_file_metadata_tags() -> Vec<Tag> {
         Tag::new("File-Id", &Uuid::new_v4().to_string()),
         Tag::new("Parent-Folder-Id", PARENT_FOLDER_ID),
         Tag::new("Unix-Time", &get_unix_timestamp().to_string()),
+        // App Tags
+        Tag::new("App-Name", "atw"),
+        Tag::new("Url", url.into()),
+        Tag::new("Timestamp", timestamp.into()),
+        Tag::new("Crawl-Depth", depth.into()),
     ]
 }
 
-fn create_file_data_tags() -> Vec<Tag> {
+fn create_file_data_tags(url: &str, timestamp: &str, depth: &str) -> Vec<Tag> {
     vec![
+        // Ardive FS tags
+        Tag::new("Content-Type", "application/warc"),
+        // App tags
         Tag::new("App-Name", "atw"),
         Tag::new("App-Version", "0.0.1_beta"),
-        Tag::new("Content-Type", "application/warc"),
         Tag::new("Content-Encoding", "gzip"),
+        Tag::new("Url", url.into()),
+        Tag::new("Timestamp", timestamp.into()),
+        Tag::new("Crawl-Depth", depth.into()),
     ]
 }
 
