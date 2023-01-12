@@ -133,3 +133,29 @@ pub struct ErrorsItem {
     pub failure: String,
     pub timestamp: String,
 }
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractRoot {
+    pub status: String,
+    pub contract_tx_id: String,
+    pub state: Value,
+    pub sort_key: String,
+    pub timestamp: String,
+    pub signature: String,
+    pub state_hash: String,
+    pub manifest: Manifest,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractWithQuery {
+    pub status: String,
+    pub contract_tx_id: String,
+    pub result: Vec<Value>,
+    pub sort_key: String,
+    pub timestamp: String,
+    pub signature: String,
+    pub state_hash: String,
+    pub manifest: Manifest,
+}
