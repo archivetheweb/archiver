@@ -1,5 +1,4 @@
 use futures::StreamExt;
-use reqwest::Url;
 use std::{
     collections::{HashMap, HashSet},
     sync::{

@@ -65,7 +65,7 @@ impl Uploader {
         }).max_by_key(|x| {
             let file = x.file_name();
 
-            let elems: Vec<&str> = file.to_str().unwrap().trim().split("-").collect();
+            let elems: Vec<&str> = file.to_str().unwrap().trim().split("_").collect();
 
             match elems[1].parse::<u128>() {
                 Ok(ts) => ts,
@@ -103,7 +103,7 @@ impl Uploader {
             let elems = name.split("_").collect::<Vec<&str>>();
             let ts = elems[1];
             let url = elems[2];
-            let depth = elems[3];
+            let depth = elems[3].split_once(".").unwrap().0;
             let data_len = data.len();
 
             // first we deploy the file data
