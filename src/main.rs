@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use archivoor_v1::runner::{LaunchOptions, Runner};
 use log::debug;
 

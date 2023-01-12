@@ -20,9 +20,9 @@ const SCROLL_JS: &str = r#" new Promise((resolve) => {
 
         if(totalHeight >= scrollHeight - window.innerHeight){
             clearInterval(timer);
-            resolve();
+            resolve("ok");
         }
-    }, 100);
+    }, 50);
 
 });"#;
 
