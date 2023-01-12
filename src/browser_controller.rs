@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use headless_chrome::Tab;
 use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
+use rand::Rng;
 use std::fs;
 use std::sync::Arc;
 use std::{thread::sleep, time::Duration};
@@ -68,8 +69,10 @@ impl BrowserController {
             warn!("Waiting for a element for url {} is retrying", url);
             tab.wait_for_element("a")?;
         };
-        debug!("sleeping for 1 second");
-        sleep(Duration::from_secs(1));
+        let mut rng = rand::thread_rng();
+        let rndm = rng.gen_range(1..5);
+        debug!("sleeping for {} seconds", rndm);
+        sleep(Duration::from_secs(rndm));
 
         if screenshot {
             let _png =
@@ -90,8 +93,8 @@ impl BrowserController {
             }
         };
 
-        debug!("sleeping for 5 seconds");
-        sleep(Duration::from_secs(5));
+        debug!("sleeping for {} seconds", rndm);
+        sleep(Duration::from_secs(rndm));
 
         Ok(tab)
     }
