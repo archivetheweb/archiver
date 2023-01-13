@@ -53,9 +53,10 @@ impl Crawler {
         // this channel will send an (String, Vec<String>,i32) tuple
         // first element being the url visited, next element being all the new urls and last being the depth of the visited_url
         let (scraped_urls_tx, mut scraped_urls_rx) =
-            mpsc::channel::<(String, Vec<String>, i32)>(100);
-        let (visit_url_tx, visit_url_rx) = mpsc::channel::<(String, i32)>(100);
-        let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(String, i32)>(100);
+            mpsc::channel::<(String, Vec<String>, i32)>(self.concurrent_browsers as usize + 10);
+        // TODO the 1000 is only temporary
+        let (visit_url_tx, visit_url_rx) = mpsc::channel::<(String, i32)>(1000);
+        let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(String, i32)>(1000);
 
         let active_browsers = Arc::new(AtomicUsize::new(0));
 
@@ -108,12 +109,14 @@ impl Crawler {
                                     url, depth, count
                                 );
                                 // we resend the url to be fetched
+                                // TODO THIS MIGHT NEED TO BE IN ITS OWN THREAD
                                 visit_url_tx.send((url, depth)).await.unwrap();
                                 *count = *count + 1;
                             }
                             None => {
                                 warn!("Retrying url {} at d={}, retried {} so far", url, depth, 0);
                                 self.failed.insert(url.to_string(), 0);
+                                // TODO THIS MIGHT NEED TO BE IN ITS OWN THREAD
                                 visit_url_tx.send((url, depth)).await.unwrap();
                             }
                             _ => {
@@ -125,8 +128,8 @@ impl Crawler {
                 }
             }
 
-            if scraped_urls_tx.capacity() == 100
-                && visit_url_tx.capacity() == 100
+            if scraped_urls_tx.capacity() == scraped_urls_tx.max_capacity()
+                && visit_url_tx.capacity() == visit_url_tx.max_capacity()
                 && active_browsers.load(Ordering::SeqCst) == 0
             {
                 let failed = self
@@ -189,57 +192,84 @@ impl Crawler {
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
 
-                        let links: Result<_, anyhow::Error> = task::spawn_blocking(move || {
-                            // headless chrome can't handle pdfs, so we make a direct request for it
-
-                            if u.as_str().ends_with(".pdf") {
-                                match reqwest::blocking::get(u.as_str()) {
-                                    Ok(res) => {
-                                        // make sure we read the text
-                                        debug!("fetching pdf at {}", u.as_str());
-                                        let _r = res.text();
-                                        return Ok((vec![], false));
+                        let links: Result<Result<_, anyhow::Error>, _> =
+                            task::spawn_blocking(move || {
+                                // headless chrome can't handle pdfs, so we make a direct request for it
+                                if u.as_str().ends_with(".pdf") {
+                                    match reqwest::blocking::get(u.as_str()) {
+                                        Ok(res) => {
+                                            // make sure we read the text
+                                            debug!("fetching pdf at {}", u.as_str());
+                                            let _r = res.text();
+                                            return Ok((vec![], false));
+                                        }
+                                        Err(e) => {
+                                            warn!("error downloading pdf err: {}", e);
+                                            return Ok((vec![], true));
+                                        }
                                     }
+                                }
+
+                                let browser = match BrowserController::new() {
+                                    Ok(b) => b,
+                                    Err(_) => return Ok((vec![], true)),
+                                };
+
+                                let tab = match browser.browse(u.as_str(), false) {
+                                    Ok(tab) => tab,
                                     Err(e) => {
-                                        warn!("error downloading pdf err: {}", e);
+                                        warn!("error browsing for {} with err {}", u, e);
+                                        // we return an empty list of links, and flag as errored out
                                         return Ok((vec![], true));
                                     }
-                                }
+                                };
+
+                                Ok((
+                                    browser
+                                        .get_links(&tab)
+                                        .iter()
+                                        .filter_map(normalize_url_map(base_url.into()))
+                                        .collect::<Vec<String>>(),
+                                    false,
+                                ))
+                            })
+                            .await;
+
+                        let links = match links {
+                            Ok(l) => l,
+                            Err(e) => {
+                                error!("problem spawning a blocking thread {}", e);
+                                ab.fetch_sub(1, Ordering::SeqCst);
+                                failed_url_tx.send((url, depth)).await.unwrap();
+                                return;
                             }
+                        };
 
-                            let browser = match BrowserController::new() {
-                                Ok(b) => b,
-                                Err(_) => return Ok((vec![], true)),
-                            };
-
-                            let tab = match browser.browse(u.as_str(), false) {
-                                Ok(tab) => tab,
-                                Err(e) => {
-                                    warn!("error browsing for {} with err {}", u, e);
-                                    // we return an empty list of links, and flag as errored out
-                                    return Ok((vec![], true));
-                                }
-                            };
-
-                            Ok((
-                                browser
-                                    .get_links(&tab)
-                                    .iter()
-                                    .filter_map(normalize_url_map(base_url.into()))
-                                    .collect::<Vec<String>>(),
-                                false,
-                            ))
-                        })
-                        .await
-                        .unwrap();
-
-                        let links = links.unwrap();
+                        let links = match links {
+                            Ok(l) => l,
+                            Err(e) => {
+                                error!("problem unwrapping links {}", e);
+                                ab.fetch_sub(1, Ordering::SeqCst);
+                                failed_url_tx.send((url, depth)).await.unwrap();
+                                return;
+                            }
+                        };
                         // if there was an error
                         // we send it to the failed url channel
                         if links.1 {
-                            failed_url_tx.send((url, depth)).await.unwrap();
+                            match failed_url_tx.send((url, depth)).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!("could not send to failed_url_tx {}", e)
+                                }
+                            };
                         } else {
-                            tx.send((url, links.0, depth)).await.unwrap();
+                            match tx.send((url, links.0, depth)).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!("could not send to tx {}", e)
+                                }
+                            };
                         }
                         ab.fetch_sub(1, Ordering::SeqCst);
                     }
@@ -249,7 +279,6 @@ impl Crawler {
             return;
         });
     }
-
     pub fn url(&self) -> String {
         self.url.to_string()
     }
