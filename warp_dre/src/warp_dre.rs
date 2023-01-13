@@ -1,5 +1,5 @@
 use derive_builder::Builder;
-use reqwest::{Client, Url};
+use reqwest::{Client, StatusCode, Url};
 use std::{collections::HashMap, str::FromStr};
 
 use crate::types::{BlacklistItem, Cached, ContractRoot, ContractWithQuery, ErrorsItem, Status};
@@ -7,6 +7,7 @@ pub struct WarpDRE {
     client: Client,
     url: Url,
 }
+use anyhow::anyhow;
 
 #[derive(Builder, Debug)]
 #[builder(setter(into))]
@@ -25,6 +26,7 @@ impl WarpDREOptions {
 
 impl WarpDREOptionsBuilder {
     fn default_url(&self) -> Url {
+        // https://dre-2.warp.cc/
         Url::from_str("https://dre-1.warp.cc").unwrap()
     }
     fn default_client(&self) -> Client {
@@ -47,9 +49,11 @@ impl WarpDRE {
             .send()
             .await?;
 
-        let parsed = res.json::<Status>().await?;
-
-        Ok(parsed)
+        if res.status() == StatusCode::OK {
+            return Ok(res.json::<_>().await?);
+        } else {
+            return Err(anyhow!(res.text().await?));
+        }
     }
 
     // TODO add state, validity, errorMessages, events and validation
@@ -64,9 +68,11 @@ impl WarpDRE {
             .send()
             .await?;
 
-        let parsed = res.json::<ContractRoot>().await?;
-
-        Ok(parsed)
+        if res.status() == StatusCode::OK {
+            return Ok(res.json::<_>().await?);
+        } else {
+            return Err(anyhow!(res.text().await?));
+        }
     }
 
     pub async fn get_contract_with_query(
@@ -83,9 +89,11 @@ impl WarpDRE {
             .send()
             .await?;
 
-        let parsed = res.json::<ContractWithQuery>().await?;
-
-        Ok(parsed)
+        if res.status() == StatusCode::OK {
+            return Ok(res.json::<_>().await?);
+        } else {
+            return Err(anyhow!(res.text().await?));
+        }
     }
 
     pub async fn get_cached(&self) -> anyhow::Result<Cached> {
@@ -95,9 +103,11 @@ impl WarpDRE {
             .send()
             .await?;
 
-        let parsed = res.json::<Cached>().await?;
-
-        Ok(parsed)
+        if res.status() == StatusCode::OK {
+            return Ok(res.json::<_>().await?);
+        } else {
+            return Err(anyhow!(res.text().await?));
+        }
     }
 
     pub async fn get_blacklist(&self) -> anyhow::Result<Vec<BlacklistItem>> {
@@ -107,9 +117,11 @@ impl WarpDRE {
             .send()
             .await?;
 
-        let parsed = res.json::<Vec<BlacklistItem>>().await?;
-
-        Ok(parsed)
+        if res.status() == StatusCode::OK {
+            return Ok(res.json::<_>().await?);
+        } else {
+            return Err(anyhow!(res.text().await?));
+        }
     }
 
     pub async fn get_errors(&self) -> anyhow::Result<Vec<ErrorsItem>> {
@@ -119,8 +131,10 @@ impl WarpDRE {
             .send()
             .await?;
 
-        let parsed = res.json::<Vec<ErrorsItem>>().await?;
-
-        Ok(parsed)
+        if res.status() == StatusCode::OK {
+            return Ok(res.json::<_>().await?);
+        } else {
+            return Err(anyhow!(res.text().await?));
+        }
     }
 }
