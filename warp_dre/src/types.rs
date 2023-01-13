@@ -159,3 +159,19 @@ pub struct ContractWithQuery {
     pub state_hash: String,
     pub manifest: Manifest,
 }
+
+const APP_NAME: &str = "App-Name";
+const APP_VERSION: &str = "App-Version";
+const CONTRACT_TX_ID: &str = "Contract"; // note: should be named Contract-Tx-Id
+const INPUT: &str = "Input";
+const CONTENT_TYPE: &str = "Content-Type";
+const CONTRACT_SRC_TX_ID: &str = "Contract-Src"; // note: should be named Contract-Src-Tx-Id
+const SDK: &str = "SDK";
+const MIN_FEE: &str = "Min-Fee";
+const INIT_STATE: &str = "Init-State";
+const INIT_STATE_TX: &str = "Init-State-TX";
+const INTERACT_WRITE: &str = "Interact-Write";
+const WASM_META: &str = "Wasm-Meta";
+const REQUEST_VRF: &str = "Request-Vrf";
+const SIGNATURE_TYPE: &str = "Signature-Type";
+const MANIFEST: &str = "Contract-Manifest";
