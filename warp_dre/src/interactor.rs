@@ -7,6 +7,7 @@ use arloader::{
 use derive_builder::Builder;
 use log::debug;
 use reqwest::{Client, StatusCode, Url};
+use serde_json::Value;
 use std::{path::PathBuf, str::FromStr};
 
 use crate::types::{InteractionResponse, APP_NAME, CONTRACT_TX_ID, INPUT, SDK, SMARTWEAVE_ACTION};
@@ -15,15 +16,17 @@ use crate::types::{InteractionResponse, APP_NAME, CONTRACT_TX_ID, INPUT, SDK, SM
 pub struct Interactor {
     client: Client,
     gateway_url: Url,
-    arweave_key_path: PathBuf,
     contract_address: String,
+    arweave: Arweave,
 }
 
-#[derive(Builder, Debug)]
+#[derive(Builder)]
 #[builder(setter(into))]
 pub struct InteractorOptions {
     #[builder(default = "self.default_url()")]
     url: Url,
+    #[builder(default = "self.default_arweave_url()")]
+    arweave_url: Url,
     #[builder(default = "self.default_client()")]
     client: Client,
     #[builder(default = "self.default_key_path()")]
@@ -41,6 +44,9 @@ impl InteractorOptionsBuilder {
     fn default_url(&self) -> Url {
         Url::from_str("https://d1o5nlqr4okus2.cloudfront.net/gateway").unwrap()
     }
+    fn default_arweave_url(&self) -> Url {
+        Url::from_str("https://arweave.net").unwrap()
+    }
     fn default_client(&self) -> Client {
         Client::new()
     }
@@ -50,7 +56,7 @@ impl InteractorOptionsBuilder {
 }
 
 impl Interactor {
-    pub fn new(lo: InteractorOptions) -> anyhow::Result<Self> {
+    pub async fn new(lo: InteractorOptions) -> anyhow::Result<Self> {
         if !lo.arweave_key_path.exists() {
             return Err(anyhow!("arweave key path does not exist"));
         }
@@ -58,27 +64,31 @@ impl Interactor {
             return Err(anyhow!("contract address must be set"));
         }
 
+        let arweave =
+            Arweave::from_keypair_path(lo.arweave_key_path.clone(), lo.arweave_url).await?;
+
         Ok(Self {
             client: lo.client,
             gateway_url: lo.url,
-            arweave_key_path: lo.arweave_key_path,
             contract_address: lo.contract_address,
+            arweave,
         })
     }
 
-    pub async fn interact(&self, input: String) -> anyhow::Result<InteractionResponse> {
-        let arweave = Arweave::from_keypair_path(
-            PathBuf::from(self.arweave_key_path.clone()),
-            Url::from_str("http://arweave.net").unwrap(),
-        )
-        .await
-        .unwrap();
-
-        let tx = arweave
-            .create_transaction(vec![1], Some(self.create_tags(input)), None, (1, 1), false)
+    // TODO validate the input (based on contract actions?)
+    pub async fn interact(&self, input: Value) -> anyhow::Result<InteractionResponse> {
+        let tx = self
+            .arweave
+            .create_transaction(
+                vec![1],
+                Some(self.create_tags(input.to_string())),
+                None,
+                (1, 1),
+                false,
+            )
             .await?;
 
-        let tx = arweave.sign_transaction(tx)?;
+        let tx = self.arweave.sign_transaction(tx)?;
 
         // now we post to the client
         let res = self

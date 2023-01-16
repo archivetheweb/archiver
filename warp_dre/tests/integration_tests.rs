@@ -77,17 +77,19 @@ fn get_contract_with_query() -> anyhow::Result<()> {
 #[test]
 #[ignore = "outbound_calls"]
 fn create_interaction() {
-    let interactor = interactor::Interactor::new(
+    let interactor = aw!(interactor::Interactor::new(
         InteractorOptionsBuilder::default()
             .contract_address("yS-CVbsg79p2sSrVAJZyRgE_d90BrxDjpAleRB-ZfXs")
             .build()
             .unwrap(),
-    )
+    ))
     .unwrap();
 
-    let res = aw!(interactor.interact(String::from(
-        r#"{"function":"postMessage","content":"Hello world!!!!!!"}"#,
-    )));
+    let input = String::from(r#"{"function":"postMessage","content":"Hello world!!!!!!"}"#);
+
+    let input = serde_json::from_str(&input).unwrap();
+
+    let res = aw!(interactor.interact(input));
 
     match res {
         Ok(r) => {
