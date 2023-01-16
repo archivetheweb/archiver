@@ -7,10 +7,9 @@ use arloader::{
 use derive_builder::Builder;
 use log::debug;
 use reqwest::{Client, StatusCode, Url};
-use serde_json::Value;
 use std::{path::PathBuf, str::FromStr};
 
-use crate::types::{APP_NAME, CONTRACT_TX_ID, INPUT, SDK, SMARTWEAVE_ACTION};
+use crate::types::{InteractionResponse, APP_NAME, CONTRACT_TX_ID, INPUT, SDK, SMARTWEAVE_ACTION};
 
 // example contract yS-CVbsg79p2sSrVAJZyRgE_d90BrxDjpAleRB-ZfXs
 pub struct Interactor {
@@ -52,7 +51,6 @@ impl InteractorOptionsBuilder {
 
 impl Interactor {
     pub fn new(lo: InteractorOptions) -> anyhow::Result<Self> {
-        println!("{:?} {}", lo.arweave_key_path, lo.arweave_key_path.exists());
         if !lo.arweave_key_path.exists() {
             return Err(anyhow!("arweave key path does not exist"));
         }
@@ -68,7 +66,7 @@ impl Interactor {
         })
     }
 
-    pub async fn interact(&self, input: String) -> anyhow::Result<()> {
+    pub async fn interact(&self, input: String) -> anyhow::Result<InteractionResponse> {
         let arweave = Arweave::from_keypair_path(
             PathBuf::from(self.arweave_key_path.clone()),
             Url::from_str("http://arweave.net").unwrap(),
@@ -92,18 +90,15 @@ impl Interactor {
                 "sequencer/register"
             ))
             .body(serde_json::to_string(&tx)?)
-            // .header("Accept-Encoding", "gzip, deflate, br")
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .send()
             .await?;
 
         if res.status() == StatusCode::OK {
-            let txt = res.json::<Value>().await?;
-            // let txt = res.json::<Value>().await?;
+            let res = res.json::<_>().await?;
 
-            println!("{:#?}", txt);
-            return Ok(());
+            return Ok(res);
         } else {
             debug!("Status is {}", res.status());
             return Err(anyhow!(

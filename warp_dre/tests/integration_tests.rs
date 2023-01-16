@@ -90,7 +90,9 @@ fn create_interaction() {
     )));
 
     match res {
-        Ok(_) => todo!(),
+        Ok(r) => {
+            println!("{:#?}", r)
+        }
         Err(e) => {
             println!("Error: {e}");
             assert_eq!(0, 1)

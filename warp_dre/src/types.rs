@@ -2,6 +2,34 @@ use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use serde_json::Value;
 
+pub const APP_NAME: &str = "App-Name";
+pub const SMARTWEAVE_ACTION: &str = "SmartWeaveAction";
+pub const APP_VERSION: &str = "App-Version";
+pub const CONTRACT_TX_ID: &str = "Contract"; // note: should be named Contract-Tx-Id
+pub const INPUT: &str = "Input";
+pub const CONTENT_TYPE: &str = "Content-Type";
+pub const CONTRACT_SRC_TX_ID: &str = "Contract-Src"; // note: should be named Contract-Src-Tx-Id
+pub const SDK: &str = "SDK";
+pub const MIN_FEE: &str = "Min-Fee";
+pub const INIT_STATE: &str = "Init-State";
+pub const INIT_STATE_TX: &str = "Init-State-TX";
+pub const INTERACT_WRITE: &str = "Interact-Write";
+pub const WASM_META: &str = "Wasm-Meta";
+pub const REQUEST_VRF: &str = "Request-Vrf";
+pub const SIGNATURE_TYPE: &str = "Signature-Type";
+pub const MANIFEST: &str = "Contract-Manifest";
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InteractionResponse {
+    pub id: String,
+    pub timestamp: i64,
+    pub public: String,
+    pub signature: String,
+    pub block: i64,
+    pub validator_signatures: Vec<Value>,
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
@@ -159,20 +187,3 @@ pub struct ContractWithQuery {
     pub state_hash: String,
     pub manifest: Manifest,
 }
-
-pub const APP_NAME: &str = "App-Name";
-pub const SMARTWEAVE_ACTION: &str = "SmartWeaveAction";
-pub const APP_VERSION: &str = "App-Version";
-pub const CONTRACT_TX_ID: &str = "Contract"; // note: should be named Contract-Tx-Id
-pub const INPUT: &str = "Input";
-pub const CONTENT_TYPE: &str = "Content-Type";
-pub const CONTRACT_SRC_TX_ID: &str = "Contract-Src"; // note: should be named Contract-Src-Tx-Id
-pub const SDK: &str = "SDK";
-pub const MIN_FEE: &str = "Min-Fee";
-pub const INIT_STATE: &str = "Init-State";
-pub const INIT_STATE_TX: &str = "Init-State-TX";
-pub const INTERACT_WRITE: &str = "Interact-Write";
-pub const WASM_META: &str = "Wasm-Meta";
-pub const REQUEST_VRF: &str = "Request-Vrf";
-pub const SIGNATURE_TYPE: &str = "Signature-Type";
-pub const MANIFEST: &str = "Contract-Manifest";
