@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use ::warp_dre::warp_dre::WarpDREOptionsBuilder;
+use ::warp_dre::{
+    interactor::{self, InteractorOptionsBuilder},
+    warp_dre::WarpDREOptionsBuilder,
+};
 use warp_dre::warp_dre;
 
 macro_rules! aw {
@@ -69,4 +72,28 @@ fn get_contract_with_query() -> anyhow::Result<()> {
     let result = result.as_str();
     assert!(result == Some("VouchDAO"));
     Ok(())
+}
+
+#[test]
+#[ignore = "outbound_calls"]
+fn create_interaction() {
+    let interactor = interactor::Interactor::new(
+        InteractorOptionsBuilder::default()
+            .contract_address("yS-CVbsg79p2sSrVAJZyRgE_d90BrxDjpAleRB-ZfXs")
+            .build()
+            .unwrap(),
+    )
+    .unwrap();
+
+    let res = aw!(interactor.interact(String::from(
+        r#"{"function":"postMessage","content":"Hello world!!!!!!"}"#,
+    )));
+
+    match res {
+        Ok(_) => todo!(),
+        Err(e) => {
+            println!("Error: {e}");
+            assert_eq!(0, 1)
+        }
+    }
 }

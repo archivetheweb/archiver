@@ -160,18 +160,19 @@ pub struct ContractWithQuery {
     pub manifest: Manifest,
 }
 
-const APP_NAME: &str = "App-Name";
-const APP_VERSION: &str = "App-Version";
-const CONTRACT_TX_ID: &str = "Contract"; // note: should be named Contract-Tx-Id
-const INPUT: &str = "Input";
-const CONTENT_TYPE: &str = "Content-Type";
-const CONTRACT_SRC_TX_ID: &str = "Contract-Src"; // note: should be named Contract-Src-Tx-Id
-const SDK: &str = "SDK";
-const MIN_FEE: &str = "Min-Fee";
-const INIT_STATE: &str = "Init-State";
-const INIT_STATE_TX: &str = "Init-State-TX";
-const INTERACT_WRITE: &str = "Interact-Write";
-const WASM_META: &str = "Wasm-Meta";
-const REQUEST_VRF: &str = "Request-Vrf";
-const SIGNATURE_TYPE: &str = "Signature-Type";
-const MANIFEST: &str = "Contract-Manifest";
+pub const APP_NAME: &str = "App-Name";
+pub const SMARTWEAVE_ACTION: &str = "SmartWeaveAction";
+pub const APP_VERSION: &str = "App-Version";
+pub const CONTRACT_TX_ID: &str = "Contract"; // note: should be named Contract-Tx-Id
+pub const INPUT: &str = "Input";
+pub const CONTENT_TYPE: &str = "Content-Type";
+pub const CONTRACT_SRC_TX_ID: &str = "Contract-Src"; // note: should be named Contract-Src-Tx-Id
+pub const SDK: &str = "SDK";
+pub const MIN_FEE: &str = "Min-Fee";
+pub const INIT_STATE: &str = "Init-State";
+pub const INIT_STATE_TX: &str = "Init-State-TX";
+pub const INTERACT_WRITE: &str = "Interact-Write";
+pub const WASM_META: &str = "Wasm-Meta";
+pub const REQUEST_VRF: &str = "Request-Vrf";
+pub const SIGNATURE_TYPE: &str = "Signature-Type";
+pub const MANIFEST: &str = "Contract-Manifest";
