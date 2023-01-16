@@ -74,10 +74,9 @@ impl Interactor {
         .await
         .unwrap();
 
-        let mut tx = arweave
+        let tx = arweave
             .create_transaction(vec![1], Some(self.create_tags(input)), None, (1, 1), false)
             .await?;
-        tx.reward = 72600854;
 
         let tx = arweave.sign_transaction(tx)?;
 
