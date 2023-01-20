@@ -180,7 +180,8 @@ pub struct ContractRoot {
 pub struct ContractWithQuery {
     pub status: String,
     pub contract_tx_id: String,
-    pub result: Vec<Value>,
+    pub result: Option<Vec<Value>>,
+    pub state: Option<Value>,
     pub sort_key: String,
     pub timestamp: String,
     pub signature: String,

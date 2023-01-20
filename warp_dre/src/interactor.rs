@@ -8,16 +8,15 @@ use derive_builder::Builder;
 use log::debug;
 use reqwest::{Client, StatusCode, Url};
 use serde_json::Value;
-use std::{path::PathBuf, str::FromStr};
+use std::str::FromStr;
 
 use crate::types::{InteractionResponse, APP_NAME, CONTRACT_TX_ID, INPUT, SDK, SMARTWEAVE_ACTION};
 
-// example contract yS-CVbsg79p2sSrVAJZyRgE_d90BrxDjpAleRB-ZfXs
 pub struct Interactor {
     client: Client,
     gateway_url: Url,
     contract_address: String,
-    arweave: Arweave,
+    pub arweave: Arweave,
 }
 
 #[derive(Builder)]
@@ -25,12 +24,8 @@ pub struct Interactor {
 pub struct InteractorOptions {
     #[builder(default = "self.default_url()")]
     url: Url,
-    #[builder(default = "self.default_arweave_url()")]
-    arweave_url: Url,
     #[builder(default = "self.default_client()")]
     client: Client,
-    #[builder(default = "self.default_key_path()")]
-    arweave_key_path: PathBuf,
     contract_address: String,
 }
 
@@ -44,28 +39,16 @@ impl InteractorOptionsBuilder {
     fn default_url(&self) -> Url {
         Url::from_str("https://d1o5nlqr4okus2.cloudfront.net/gateway").unwrap()
     }
-    fn default_arweave_url(&self) -> Url {
-        Url::from_str("https://arweave.net").unwrap()
-    }
     fn default_client(&self) -> Client {
         Client::new()
-    }
-    fn default_key_path(&self) -> PathBuf {
-        PathBuf::from(".secrets/jwk.json")
     }
 }
 
 impl Interactor {
-    pub async fn new(lo: InteractorOptions) -> anyhow::Result<Self> {
-        if !lo.arweave_key_path.exists() {
-            return Err(anyhow!("arweave key path does not exist"));
-        }
+    pub fn new(lo: InteractorOptions, arweave: Arweave) -> anyhow::Result<Self> {
         if lo.contract_address == "" {
             return Err(anyhow!("contract address must be set"));
         }
-
-        let arweave =
-            Arweave::from_keypair_path(lo.arweave_key_path.clone(), lo.arweave_url).await?;
 
         Ok(Self {
             client: lo.client,
@@ -132,4 +115,6 @@ impl Interactor {
 // Interaction example https://arweave.app/tx/vJD6wxgynBgA4oDPaKPhEarKpQiw5ZMikv2-qUXCNtY
 // https://sonar.warp.cc/#/app/interaction/2wXJx9r1_epUgWzyVXWVSS7XqsWZV7cKDCB_jUB7f-I
 // https://github.com/warp-contracts/warp-dre-node
-//https://github.com/warp-contracts/gateway/blob/main/src/gateway/router/gatewayRouter.ts
+// https://github.com/warp-contracts/gateway/blob/main/src/gateway/router/gatewayRouter.ts
+
+// Example contract 8iOzf88NnWPk2h45QsqRhtKm0wM1z_a97O2oKgTfOio (mainnet)

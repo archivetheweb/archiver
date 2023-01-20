@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use ::warp_dre::{
     interactor::{self, InteractorOptionsBuilder},
     warp_dre::WarpDREOptionsBuilder,
 };
+use arloader::Arweave;
+use reqwest::Url;
 use warp_dre::warp_dre;
 
 macro_rules! aw {
@@ -68,7 +70,8 @@ fn get_contract_with_query() -> anyhow::Result<()> {
     query.insert("query".into(), "$.name".into());
 
     let res = aw!(client.get_contract_with_query(contract_tx_id, query))?;
-    let result = res.result[0].clone();
+    let r = res.result.unwrap();
+    let result = r[0].clone();
     let result = result.as_str();
     assert!(result == Some("VouchDAO"));
     Ok(())
@@ -77,12 +80,19 @@ fn get_contract_with_query() -> anyhow::Result<()> {
 #[test]
 #[ignore = "outbound_calls"]
 fn create_interaction() {
-    let interactor = aw!(interactor::Interactor::new(
+    let arweave = aw!(Arweave::from_keypair_path(
+        PathBuf::from(".secrets/jwk.json"),
+        Url::from_str("https://arweave.net").unwrap()
+    ))
+    .unwrap();
+
+    let interactor = interactor::Interactor::new(
         InteractorOptionsBuilder::default()
             .contract_address("yS-CVbsg79p2sSrVAJZyRgE_d90BrxDjpAleRB-ZfXs")
             .build()
             .unwrap(),
-    ))
+        arweave,
+    )
     .unwrap();
 
     let input = String::from(r#"{"function":"postMessage","content":"Hello world!!!!!!"}"#);
