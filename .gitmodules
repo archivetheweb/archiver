@@ -1,0 +1,3 @@
+[submodule "warp-contracts-rust"]
+	path = warp-contracts-rust
+	url = https://github.com/archivetheweb/warp-contracts-rust.git
