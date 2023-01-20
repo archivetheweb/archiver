@@ -48,7 +48,7 @@ impl Contract {
         Ok(s)
     }
 
-    pub fn get_query_container(&self) -> HashMap<String, String> {
+    fn get_query_container(&self) -> HashMap<String, String> {
         let mut q = HashMap::new();
         match self.environment.as_str() {
             "testnet" => {
@@ -78,7 +78,7 @@ mod test {
         .unwrap();
 
         let c = Contract::new(
-            "8iOzf88NnWPk2h45QsqRhtKm0wM1z_a97O2oKgTfOio".into(),
+            "WT4rx8FwvzHLqgeaJsxK72rotZFOo3E9qSJ_3WSNO7U".into(),
             "testnet".into(),
             arweave,
         )
