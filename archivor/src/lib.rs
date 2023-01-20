@@ -4,6 +4,7 @@ extern crate log;
 extern crate derive_builder;
 
 pub mod browser_controller;
+pub mod contract;
 pub mod crawler;
 pub mod runner;
 pub mod uploader;
