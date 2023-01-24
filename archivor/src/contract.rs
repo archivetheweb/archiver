@@ -138,6 +138,22 @@ impl Contract {
         Ok(res)
     }
 
+    pub async fn request_archiving(
+        &self,
+        archive: ArchiveRequest,
+    ) -> anyhow::Result<InteractionResponse> {
+        let mut v = serde_json::to_value(archive)?;
+        let t = v.as_object_mut().unwrap();
+        t.insert(
+            "function".into(),
+            serde_json::Value::String("requestArchiving".into()),
+        );
+
+        let res = self.interactor.interact(v).await?;
+
+        Ok(res)
+    }
+
     fn prepare_query(&self) -> HashMap<String, String> {
         let mut q = HashMap::new();
         match self.environment.as_str() {
