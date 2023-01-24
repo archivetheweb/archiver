@@ -1,4 +1,5 @@
 use reqwest::Url;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const ARCHIVE_DIR: &str = "archivoor";
 pub const BASE_DIR: &str = "collections";
@@ -30,6 +31,10 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
 
 pub fn extract_url(url: String) -> String {
     url.split("record/").nth(1).unwrap().to_string()
+}
+
+pub fn get_unix_timestamp() -> Duration {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
 }
 
 #[cfg(test)]

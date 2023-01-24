@@ -4,9 +4,13 @@ use std::collections::{BTreeMap, HashMap};
 
 use anyhow::anyhow;
 use arloader::Arweave;
-use atw::state::{ArchiveRequest, ArchiveSubmission, State};
+use atw::{
+    action::RegisterUploader,
+    state::{ArchiveRequest, ArchiveSubmission, State},
+};
 use warp_dre::{
     interactor::{Interactor, InteractorOptionsBuilder},
+    types::InteractionResponse,
     warp_dre::{WarpDRE, WarpDREOptionsBuilder},
 };
 
@@ -92,7 +96,7 @@ impl Contract {
             None => return Err(anyhow!("Could not unwrap result")),
         };
 
-        let s: Vec<BTreeMap<String, ArchiveSubmission>> =
+        let s: Vec<BTreeMap<usize, ArchiveSubmission>> =
             serde_json::from_value(serde_json::Value::Array(s))?;
 
         let s = s.into_iter().nth(0).unwrap();
@@ -100,6 +104,38 @@ impl Contract {
         let col = s.into_iter().rev().take(count).map(|x| x.1).collect();
 
         Ok(col)
+    }
+
+    pub async fn register_uploader(
+        &self,
+        uploader: RegisterUploader,
+    ) -> anyhow::Result<InteractionResponse> {
+        let mut v = serde_json::to_value(uploader)?;
+        let t = v.as_object_mut().unwrap();
+        t.insert(
+            "function".into(),
+            serde_json::Value::String("registerUploader".into()),
+        );
+
+        let res = self.interactor.interact(v).await?;
+
+        Ok(res)
+    }
+
+    pub async fn submit_archive(
+        &self,
+        archive: ArchiveSubmission,
+    ) -> anyhow::Result<InteractionResponse> {
+        let mut v = serde_json::to_value(archive)?;
+        let t = v.as_object_mut().unwrap();
+        t.insert(
+            "function".into(),
+            serde_json::Value::String("submitArchive".into()),
+        );
+
+        let res = self.interactor.interact(v).await?;
+
+        Ok(res)
     }
 
     fn prepare_query(&self) -> HashMap<String, String> {
@@ -120,7 +156,10 @@ mod test {
 
     use std::{path::PathBuf, str::FromStr};
 
+    use atw::state::ArchiveOptions;
     use reqwest::Url;
+
+    use crate::utils::get_unix_timestamp;
 
     use super::*;
 
@@ -171,5 +210,50 @@ mod test {
         println!("{:#?}", s);
 
         assert!(s.len() > 0);
+    }
+
+    #[test]
+    fn test_register_uploader() {
+        let arweave = tokio_test::block_on(Arweave::from_keypair_path(
+            PathBuf::from("res/test_wallet.json"),
+            Url::from_str("https://arweave.net").unwrap(),
+        ))
+        .unwrap();
+
+        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+
+        let uploader = RegisterUploader {
+            friendly_name: "alice".into(),
+        };
+
+        let s = tokio_test::block_on(c.register_uploader(uploader)).unwrap();
+        println!("{:#?}", s);
+    }
+
+    #[test]
+    fn test_submit_archives() {
+        let arweave = tokio_test::block_on(Arweave::from_keypair_path(
+            PathBuf::from("res/test_wallet.json"),
+            Url::from_str("https://arweave.net").unwrap(),
+        ))
+        .unwrap();
+
+        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+
+        let archive = ArchiveSubmission {
+            full_url: "https://example.com?hi".into(),
+            arweave_tx: "aa".into(),
+            size: 1,
+            uploader_address: UPLOADER_ADDRESS.into(),
+            archive_request_id: "ol2dKXgntbxj5PFtbWvgmftCLibrqkjIrraQYzcweFU".into(),
+            timestamp: get_unix_timestamp().as_secs() as usize,
+            options: ArchiveOptions {
+                depth: 0,
+                domain_only: false,
+            },
+        };
+
+        let s = tokio_test::block_on(c.submit_archive(archive)).unwrap();
+        println!("{:#?}", s);
     }
 }
