@@ -300,6 +300,24 @@ mod test {
     }
 
     #[test]
+    fn test_delete_archive_request() {
+        let arweave = tokio_test::block_on(Arweave::from_keypair_path(
+            PathBuf::from("res/test_wallet.json"),
+            Url::from_str("https://arweave.net").unwrap(),
+        ))
+        .unwrap();
+
+        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+
+        let uploader = DeleteArchiveRequest {
+            archive_id: "ol2dKXgntbxj5PFtbWvgmftCLibrqkjIrraQYzcweFU".into(),
+        };
+
+        let s = tokio_test::block_on(c.delete_archive_request(uploader)).unwrap();
+        println!("{:#?}", s);
+    }
+
+    #[test]
     fn test_submit_archives() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
             PathBuf::from("res/test_wallet.json"),
