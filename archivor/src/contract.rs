@@ -221,8 +221,8 @@ mod test {
 
     use super::*;
 
-    const EXAMPLE_CONTRACT: &str = "eKAJ82pbB9fkmECsQWCCpZc9RrS7RP7To11uq2iH61U";
-    const UPLOADER_ADDRESS: &str = "s8NFoVR-REMwfG3JN92SI3ridTtDPvBpWafB0Bk6hFc";
+    const EXAMPLE_CONTRACT: &str = "YQLMJqrN8jTAmuEB_nWqgK9cKT72VwtvTqv7KP7ZOUc";
+    const UPLOADER_ADDRESS: &str = "k-JI7M_U8hoezJuaaxKx8IBFJ3KRA9DGNCUw0Baltyc";
 
     #[test]
     fn test_state() {
