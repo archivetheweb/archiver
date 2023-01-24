@@ -1,10 +1,10 @@
 // use crate::
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use anyhow::anyhow;
 use arloader::Arweave;
-use atw::state::{ArchiveRequest, State};
+use atw::state::{ArchiveRequest, ArchiveSubmission, State};
 use warp_dre::{
     interactor::{Interactor, InteractorOptionsBuilder},
     warp_dre::{WarpDRE, WarpDREOptionsBuilder},
@@ -59,7 +59,6 @@ impl Contract {
             format!(r#"$.archiveRequests.[?(@.uploaderAddress=="{}")]"#, address),
         );
 
-        println!("{:?}", q);
         let res = self
             .reader
             .get_contract_with_query(&self.contract_id, q)
@@ -73,6 +72,34 @@ impl Contract {
         let s: Vec<ArchiveRequest> = serde_json::from_value(serde_json::Value::Array(s))?;
 
         Ok(s)
+    }
+
+    pub async fn archives_by_url(
+        &self,
+        url: &str,
+        count: usize,
+    ) -> anyhow::Result<Vec<ArchiveSubmission>> {
+        let mut q = self.prepare_query();
+        q.insert("query".into(), format!(r#"$.archives["{}"]"#, url));
+
+        let res = self
+            .reader
+            .get_contract_with_query(&self.contract_id, q)
+            .await?;
+
+        let s = match res.result {
+            Some(s) => s,
+            None => return Err(anyhow!("Could not unwrap result")),
+        };
+
+        let s: Vec<BTreeMap<String, ArchiveSubmission>> =
+            serde_json::from_value(serde_json::Value::Array(s))?;
+
+        let s = s.into_iter().nth(0).unwrap();
+
+        let col = s.into_iter().rev().take(count).map(|x| x.1).collect();
+
+        Ok(col)
     }
 
     fn prepare_query(&self) -> HashMap<String, String> {
@@ -97,6 +124,9 @@ mod test {
 
     use super::*;
 
+    const EXAMPLE_CONTRACT: &str = "eKAJ82pbB9fkmECsQWCCpZc9RrS7RP7To11uq2iH61U";
+    const UPLOADER_ADDRESS: &str = "s8NFoVR-REMwfG3JN92SI3ridTtDPvBpWafB0Bk6hFc";
+
     #[test]
     fn test_state() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
@@ -105,12 +135,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(
-            "WT4rx8FwvzHLqgeaJsxK72rotZFOo3E9qSJ_3WSNO7U".into(),
-            "mainnet",
-            arweave,
-        )
-        .unwrap();
+        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.state()).unwrap();
         println!("{:#?}", s);
@@ -124,17 +149,25 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(
-            "WT4rx8FwvzHLqgeaJsxK72rotZFOo3E9qSJ_3WSNO7U".into(),
-            "mainnet",
-            arweave,
-        )
+        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+
+        let s = tokio_test::block_on(c.archiving_requests_for(UPLOADER_ADDRESS)).unwrap();
+        println!("{:#?}", s);
+
+        assert!(s.len() > 0);
+    }
+
+    #[test]
+    fn test_archives_by_url() {
+        let arweave = tokio_test::block_on(Arweave::from_keypair_path(
+            PathBuf::from("res/test_wallet.json"),
+            Url::from_str("https://arweave.net").unwrap(),
+        ))
         .unwrap();
 
-        let s = tokio_test::block_on(
-            c.archiving_requests_for("H9hkQ6njDcDNbP7thTDmgprMZP_5QJGMxyJAwbyBAGg"),
-        )
-        .unwrap();
+        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+
+        let s = tokio_test::block_on(c.archives_by_url("example.com", 10)).unwrap();
         println!("{:#?}", s);
 
         assert!(s.len() > 0);
