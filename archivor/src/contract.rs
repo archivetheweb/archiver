@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use arloader::Arweave;
 use atw::{
     action::RegisterUploader,
-    state::{ArchiveRequest, ArchiveSubmission, State},
+    state::{ArchiveRequest, ArchiveSubmission, State, Uploader},
 };
 use warp_dre::{
     interactor::{Interactor, InteractorOptionsBuilder},
@@ -74,6 +74,29 @@ impl Contract {
         };
 
         let s: Vec<ArchiveRequest> = serde_json::from_value(serde_json::Value::Array(s))?;
+
+        Ok(s)
+    }
+
+    pub async fn uploaders(&self) -> anyhow::Result<HashMap<String, Uploader>> {
+        let mut q = self.prepare_query();
+        q.insert("query".into(), format!(r#"$.uploaders"#));
+
+        let res = self
+            .reader
+            .get_contract_with_query(&self.contract_id, q)
+            .await?;
+
+        let s = match res.result {
+            Some(s) => s,
+            None => return Err(anyhow!("Could not unwrap result")),
+        };
+
+        let s =
+            serde_json::from_value::<Vec<HashMap<String, Uploader>>>(serde_json::Value::Array(s))?
+                .into_iter()
+                .nth(0)
+                .unwrap();
 
         Ok(s)
     }
@@ -193,6 +216,20 @@ mod test {
         let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.state()).unwrap();
+        println!("{:#?}", s);
+    }
+
+    #[test]
+    fn test_uploaders() {
+        let arweave = tokio_test::block_on(Arweave::from_keypair_path(
+            PathBuf::from("res/test_wallet.json"),
+            Url::from_str("https://arweave.net").unwrap(),
+        ))
+        .unwrap();
+
+        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+
+        let s = tokio_test::block_on(c.uploaders()).unwrap();
         println!("{:#?}", s);
     }
 
