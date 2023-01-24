@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use anyhow::anyhow;
 use arloader::Arweave;
 use atw::{
-    action::RegisterUploader,
+    action::{DeleteArchiveRequest, RegisterUploader},
     state::{ArchiveRequest, ArchiveSubmission, State, Uploader},
 };
 use warp_dre::{
@@ -170,6 +170,22 @@ impl Contract {
         t.insert(
             "function".into(),
             serde_json::Value::String("requestArchiving".into()),
+        );
+
+        let res = self.interactor.interact(v).await?;
+
+        Ok(res)
+    }
+
+    pub async fn delete_archive_request(
+        &self,
+        archive: DeleteArchiveRequest,
+    ) -> anyhow::Result<InteractionResponse> {
+        let mut v = serde_json::to_value(archive)?;
+        let t = v.as_object_mut().unwrap();
+        t.insert(
+            "function".into(),
+            serde_json::Value::String("deleteArchiveRequest".into()),
         );
 
         let res = self.interactor.interact(v).await?;
