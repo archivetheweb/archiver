@@ -179,8 +179,11 @@ impl Contract {
 
     pub async fn delete_archive_request(
         &self,
-        archive: DeleteArchiveRequest,
+        archive_id: &str,
     ) -> anyhow::Result<InteractionResponse> {
+        let archive = DeleteArchiveRequest {
+            archive_id: archive_id.into(),
+        };
         let mut v = serde_json::to_value(archive)?;
         let t = v.as_object_mut().unwrap();
         t.insert(
@@ -309,11 +312,10 @@ mod test {
 
         let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
 
-        let uploader = DeleteArchiveRequest {
-            archive_id: "ol2dKXgntbxj5PFtbWvgmftCLibrqkjIrraQYzcweFU".into(),
-        };
-
-        let s = tokio_test::block_on(c.delete_archive_request(uploader)).unwrap();
+        let s = tokio_test::block_on(
+            c.delete_archive_request("ol2dKXgntbxj5PFtbWvgmftCLibrqkjIrraQYzcweFU".into()),
+        )
+        .unwrap();
         println!("{:#?}", s);
     }
 
