@@ -1,10 +1,10 @@
-use std::{cmp::Ordering, path::PathBuf, str::FromStr};
+use std::{cmp::Ordering, fs, path::PathBuf, str::FromStr};
 
 use anyhow::anyhow;
 use archivoor_v1::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
-    utils::get_unix_timestamp,
+    utils::{get_archive_information_from_name, get_unix_timestamp},
 };
 use arloader::Arweave;
 use atw::state::{ArchiveOptions, ArchiveSubmission};
@@ -99,30 +99,42 @@ async fn main() -> anyhow::Result<()> {
         let url = &req.crawl_options.urls[0];
 
         let filenames = r.run_crawl(url).await?;
-
         println!("filenames {:?}", filenames);
 
-        let tx_ids = r.run_upload_files(filenames).await?;
+        let main_file = filenames[0].clone();
 
-        println!("tx_ids {:?}", tx_ids);
+        let metadata = fs::metadata(&main_file)?;
 
-        c.submit_archive(ArchiveSubmission {
-            full_url: url.into(),
-            // TODO
-            size: 1,
-            uploader_address: wallet_address.clone(),
-            archive_request_id: req.id,
-            // TODO
-            timestamp: 1,
-            arweave_tx: tx_ids[0].clone(),
-            options: ArchiveOptions {
-                depth: req.crawl_options.depth,
-                domain_only: req.crawl_options.domain_only,
-            },
-        })
-        .await?;
+        let size = metadata.len();
 
-        // TODO add concurrency
+        println!("{}", size);
+
+        let info = get_archive_information_from_name(&main_file)?;
+
+        println!("{:?}  {:?}", info, size);
+
+        // TODO fix timestamp
+
+        // let tx_ids = r.run_upload_files(filenames).await?;
+
+        // println!("tx_ids {:?}", tx_ids);
+
+        // c.submit_archive(ArchiveSubmission {
+        //     full_url: url.into(),
+        //     size: size as usize,
+        //     uploader_address: wallet_address.clone(),
+        //     archive_request_id: req.id,
+        //     timestamp: info.timestamp,
+        //     arweave_tx: tx_ids[0].clone(),
+        //     options: ArchiveOptions {
+        //         depth: req.crawl_options.depth,
+        //         domain_only: req.crawl_options.domain_only,
+        //     },
+        // })
+        // .await?;
     }
     Ok(())
 }
+
+// 20230125 160157993364
+// YYYYMMDD HHMMSS

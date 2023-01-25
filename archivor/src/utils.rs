@@ -1,5 +1,9 @@
+use anyhow::anyhow;
 use reqwest::Url;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 pub const ARCHIVE_DIR: &str = "archivoor";
 pub const BASE_DIR: &str = "collections";
@@ -35,6 +39,36 @@ pub fn extract_url(url: String) -> String {
 
 pub fn get_unix_timestamp() -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+}
+
+#[derive(Debug)]
+pub struct ArchiveInfo {
+    pub depth: u128,
+    pub timestamp: u128,
+    pub url: String,
+}
+
+pub fn get_archive_information_from_name(filename: &str) -> anyhow::Result<ArchiveInfo> {
+    let file_path = PathBuf::from(filename);
+    let name = match file_path.file_name() {
+        Some(n) => n.to_str().unwrap(),
+        None => return Err(anyhow!("invalid file path {:?}", file_path)),
+    };
+
+    //archivoor_<ts>_<url>_<depth>.warc.gz
+    let elems = name.split("_").collect::<Vec<&str>>();
+    let ts: u128 = elems[1].parse()?;
+    let depth: u128 = elems[3].split_once(".").unwrap().0.parse()?;
+
+    let url = elems[2];
+
+    println!("{ts}");
+
+    Ok(ArchiveInfo {
+        depth: depth,
+        timestamp: ts,
+        url: url.into(),
+    })
 }
 
 #[cfg(test)]
