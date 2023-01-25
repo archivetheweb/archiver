@@ -7,6 +7,7 @@ use archivoor_v1::{
     utils::get_unix_timestamp,
 };
 use arloader::Arweave;
+use atw::state::{ArchiveOptions, ArchiveSubmission};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use cron::Schedule;
 use log::debug;
@@ -104,6 +105,22 @@ async fn main() -> anyhow::Result<()> {
         let tx_ids = r.run_upload_files(filenames).await?;
 
         println!("tx_ids {:?}", tx_ids);
+
+        c.submit_archive(ArchiveSubmission {
+            full_url: url.into(),
+            // TODO
+            size: 1,
+            uploader_address: wallet_address.clone(),
+            archive_request_id: req.id,
+            // TODO
+            timestamp: 1,
+            arweave_tx: tx_ids[0].clone(),
+            options: ArchiveOptions {
+                depth: req.crawl_options.depth,
+                domain_only: req.crawl_options.domain_only,
+            },
+        })
+        .await?;
 
         // TODO add concurrency
     }
