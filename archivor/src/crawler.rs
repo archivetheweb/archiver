@@ -3,7 +3,6 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        mpsc::SyncSender,
         Arc,
     },
     time::Duration,
@@ -44,11 +43,7 @@ impl Crawler {
         }
     }
 
-    pub async fn crawl(
-        &mut self,
-        tx: SyncSender<String>,
-        should_terminate: Arc<AtomicBool>,
-    ) -> anyhow::Result<()> {
+    pub async fn crawl(&mut self, should_terminate: Arc<AtomicBool>) -> anyhow::Result<()> {
         // we setup a channel for new url
         // this channel will send an (String, Vec<String>,i32) tuple
         // first element being the url visited, next element being all the new urls and last being the depth of the visited_url
@@ -163,8 +158,6 @@ impl Crawler {
 
             sleep(Duration::from_millis(10)).await;
         }
-
-        tx.send("done".to_string()).unwrap();
 
         Ok(())
     }

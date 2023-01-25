@@ -2,12 +2,9 @@ use std::{
     path::PathBuf,
     str::FromStr,
     sync::{
-        mpsc::{sync_channel, TryRecvError},
         Arc,
         {atomic::AtomicBool, atomic::Ordering},
     },
-    thread::sleep,
-    time::Duration,
 };
 
 use anyhow::anyhow;
@@ -20,6 +17,7 @@ pub struct Runner {
     uploader: Option<Uploader>,
     warc_writer: WarcWriter,
     options: LaunchOptions,
+    should_terminate: Arc<AtomicBool>,
 }
 
 #[derive(Builder, Debug)]
@@ -92,33 +90,48 @@ impl Runner {
             None
         };
 
+        let should_terminate = Arc::new(AtomicBool::new(false));
+        signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
+        signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
+
         Ok(Runner {
             uploader,
             warc_writer,
             options: lo,
+            should_terminate,
         })
     }
 
-    pub async fn run(&self, url: &str) -> anyhow::Result<()> {
+    pub async fn run_all(&self, url: &str) -> anyhow::Result<()> {
+        self.run_crawl(url).await?;
+
+        if !self.should_terminate.load(Ordering::Relaxed) {
+            self.run_upload_latest().await?;
+        }
+
+        Ok(())
+    }
+
+    fn prepare_urls(&self, url: &str) -> anyhow::Result<(String, String, String)> {
         let u = Url::from_str(url)?;
         let domain = match u.domain() {
             Some(d) => d,
             None => return Err(anyhow!("url must have a valid domain")),
         };
-        let base_url = &format!("{}:{}", self.options.base_url, self.warc_writer.port());
+        let base_url = format!("{}:{}", self.options.base_url, self.warc_writer.port());
 
-        let full_url = &format!(
+        let full_url = format!(
             "{}/{}/record/{}",
             base_url,
             self.warc_writer.archive_name(),
             url
         );
 
-        let should_terminate = Arc::new(AtomicBool::new(false));
-        signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
-        signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
+        Ok((base_url, full_url, domain.into()))
+    }
 
-        let (tx, rx) = sync_channel::<String>(1);
+    pub async fn run_crawl(&self, url: &str) -> anyhow::Result<Vec<String>> {
+        let (base_url, full_url, domain) = self.prepare_urls(url)?;
 
         info!(
             "Initializing crawl of {} with depth {}, {} browsers, {} retries.",
@@ -128,54 +141,54 @@ impl Runner {
             self.options.url_retries
         );
         let mut crawler = Crawler::new(
-            base_url,
-            full_url,
+            &base_url,
+            &full_url,
             self.options.crawl_depth,
             self.options.concurrent_browsers,
             self.options.url_retries,
         );
-        crawler.crawl(tx.clone(), should_terminate.clone()).await?;
+        crawler.crawl(self.should_terminate.clone()).await?;
 
         // we rename the files that the warc writer created for easy retrieval
-        self.warc_writer
-            .rename_files(domain, self.options.crawl_depth)?;
+        let files = self
+            .warc_writer
+            .rename_files(&domain, self.options.crawl_depth)?;
+        Ok(files)
+    }
 
-        if self.options.with_upload {
-            match &self.uploader {
-                Some(u) => {
-                    if !should_terminate.load(Ordering::Relaxed) {
-                        let id = u
-                            .upload_latest_file(&self.warc_writer.archive_dir())
-                            .await?;
-                        println!(
-                            "ids of the tx are \n File Tx: {} \n Metadata tx: {}",
-                            id.0, id.1
-                        );
-                    }
-                }
-                None => {
-                    error!("no uploader")
-                }
-            }
+    pub async fn run_upload_latest(&self) -> anyhow::Result<(String, String)> {
+        if !self.options.with_upload {
+            return Err(anyhow!("no upload option turned on"));
         }
 
-        while !should_terminate.load(Ordering::Relaxed) {
-            match rx.try_recv() {
-                Ok(_res) => {
-                    // when done, we read the recordings
-                    break;
-                }
-                Err(TryRecvError::Empty) => {
-                    sleep(Duration::from_secs(1));
-                    continue;
-                }
-                Err(TryRecvError::Disconnected) => {
-                    break;
-                }
+        match &self.uploader {
+            Some(u) => {
+                let id = u
+                    .upload_latest_file(&self.warc_writer.archive_dir())
+                    .await?;
+                println!(
+                    "ids of the tx are \n File Tx: {} \n Metadata tx: {}",
+                    id.0, id.1
+                );
+                return Ok((id.0, id.1));
             }
+            None => Err(anyhow!("uploader not defined")),
+        }
+    }
+
+    pub async fn run_upload_files(&self, files: Vec<String>) -> anyhow::Result<Vec<String>> {
+        if !self.options.with_upload {
+            return Err(anyhow!("no upload option turned on"));
         }
 
-        Ok(())
+        match &self.uploader {
+            Some(u) => {
+                let ids = u.upload_files(files).await?;
+
+                return Ok(ids);
+            }
+            None => Err(anyhow!("uploader not defined")),
+        }
     }
 }
 

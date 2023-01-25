@@ -97,11 +97,15 @@ async fn main() -> anyhow::Result<()> {
 
         let url = &req.crawl_options.urls[0];
 
-        r.run(url).await?;
+        let filenames = r.run_crawl(url).await?;
 
-        // TODO submit archive to contract with TXID
+        println!("filenames {:?}", filenames);
 
-        // TODO concurrency
+        let tx_ids = r.run_upload_files(filenames).await?;
+
+        println!("tx_ids {:?}", tx_ids);
+
+        // TODO add concurrency
     }
     Ok(())
 }

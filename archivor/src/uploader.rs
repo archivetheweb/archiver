@@ -86,6 +86,20 @@ impl Uploader {
         self.upload(&latest_file_path).await
     }
 
+    pub async fn upload_files(&self, files: Vec<String>) -> anyhow::Result<Vec<String>> {
+        let f = files
+            .iter()
+            .map(|x| PathBuf::from(x))
+            .collect::<Vec<PathBuf>>();
+        let mut tx_ids = vec![];
+        for file_path in &f {
+            let (file_tx_id, _) = self.upload(file_path).await?;
+            tx_ids.push(file_tx_id);
+        }
+
+        Ok(tx_ids)
+    }
+
     // TODO
     // pub async fn upload_dir()
 

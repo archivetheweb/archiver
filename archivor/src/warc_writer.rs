@@ -177,36 +177,41 @@ impl WarcWriter {
         Ok(dir)
     }
 
-    pub fn rename_files(&self, new_name: &str, depth: i32) -> anyhow::Result<()> {
+    pub fn rename_files(&self, new_name: &str, depth: i32) -> anyhow::Result<Vec<String>> {
         let warcs = self.fetch_all_warcs()?;
 
-        warcs.iter().for_each(|x| {
-            let file_name = x.file_name();
-            let file_name = file_name.to_str().unwrap();
-            if file_name.contains("<unprocessed>") {
-                let name_elems: Vec<&str> = file_name.trim().split("-").collect();
-                // the name matters as we will be using it to
-                let new_full_name = format!(
-                    "archivoor_{}_{}_{}.warc.gz",
-                    name_elems[2],
-                    encode(new_name),
-                    depth
-                );
-                let mut new_path = x.path().clone();
-                new_path.pop();
-                new_path.push(&new_full_name);
-                match fs::rename(x.path(), new_path) {
-                    Ok(_) => {
-                        debug!("renamed {} to {}", file_name, new_full_name)
-                    }
-                    Err(e) => {
-                        error!("could not rename {} with err: {}", file_name, e)
+        Ok(warcs
+            .iter()
+            .filter_map(|x| {
+                let file_name = x.file_name();
+                let file_name = file_name.to_str().unwrap();
+                if file_name.contains("<unprocessed>") {
+                    let name_elems: Vec<&str> = file_name.trim().split("-").collect();
+                    // the name matters as we will be using it to
+                    let new_full_name = format!(
+                        "archivoor_{}_{}_{}.warc.gz",
+                        name_elems[2],
+                        encode(new_name),
+                        depth
+                    );
+                    let mut new_path = x.path().clone();
+                    new_path.pop();
+                    new_path.push(&new_full_name);
+
+                    match fs::rename(x.path(), &new_path) {
+                        Ok(_) => {
+                            debug!("renamed {} to {}", file_name, new_full_name);
+                            return Some(new_path.to_str().unwrap().into());
+                        }
+                        Err(e) => {
+                            error!("could not rename {} with err: {}", file_name, e);
+                            return None;
+                        }
                     }
                 }
-            }
-        });
-
-        Ok(())
+                None
+            })
+            .collect())
     }
 
     // TODO
