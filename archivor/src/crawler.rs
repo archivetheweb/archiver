@@ -93,7 +93,6 @@ impl Crawler {
                 }
             }
 
-            // we retry
             if self.url_retries > 0 {
                 match failed_url_rx.try_recv() {
                     Ok((url, depth)) => {
@@ -104,14 +103,13 @@ impl Crawler {
                                     url, depth, count
                                 );
                                 // we resend the url to be fetched
-                                // TODO THIS MIGHT NEED TO BE IN ITS OWN THREAD
                                 visit_url_tx.send((url, depth)).await.unwrap();
                                 *count = *count + 1;
                             }
                             None => {
                                 warn!("Retrying url {} at d={}, retried {} so far", url, depth, 0);
                                 self.failed.insert(url.to_string(), 0);
-                                // TODO THIS MIGHT NEED TO BE IN ITS OWN THREAD
+                                // this could be blocking if not in it's own thread or not enough buffer
                                 visit_url_tx.send((url, depth)).await.unwrap();
                             }
                             _ => {
