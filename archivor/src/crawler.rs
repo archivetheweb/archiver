@@ -86,9 +86,7 @@ impl Crawler {
             } else {
                 // we check if channel is empty
                 match res.err().unwrap() {
-                    mpsc::error::TryRecvError::Empty => {
-                        // debug!("empty")
-                    }
+                    mpsc::error::TryRecvError::Empty => {}
                     mpsc::error::TryRecvError::Disconnected => debug!("disconnected"),
                 }
             }
