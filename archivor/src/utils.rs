@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use chrono::NaiveDateTime;
 use reqwest::Url;
 use std::{
     path::PathBuf,
@@ -41,34 +42,57 @@ pub fn get_unix_timestamp() -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
 }
 
+const FORMAT_STRING: &str = "%Y%m%d%H%M%S";
 #[derive(Debug)]
 pub struct ArchiveInfo {
-    pub depth: u128,
-    pub timestamp: u128,
-    pub url: String,
+    depth: u8,
+    timestamp: NaiveDateTime,
+    url: String,
 }
 
-pub fn get_archive_information_from_name(filename: &str) -> anyhow::Result<ArchiveInfo> {
-    let file_path = PathBuf::from(filename);
-    let name = match file_path.file_name() {
-        Some(n) => n.to_str().unwrap(),
-        None => return Err(anyhow!("invalid file path {:?}", file_path)),
-    };
+impl ArchiveInfo {
+    pub fn new(filename: &str) -> anyhow::Result<Self> {
+        Self::get_archive_information_from_name(filename)
+    }
 
-    //archivoor_<ts>_<url>_<depth>.warc.gz
-    let elems = name.split("_").collect::<Vec<&str>>();
-    let ts: u128 = elems[1].parse()?;
-    let depth: u128 = elems[3].split_once(".").unwrap().0.parse()?;
+    pub fn depth(&self) -> u8 {
+        self.depth
+    }
 
-    let url = elems[2];
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
 
-    println!("{ts}");
+    pub fn unix_ts(&self) -> i64 {
+        self.timestamp.timestamp()
+    }
 
-    Ok(ArchiveInfo {
-        depth: depth,
-        timestamp: ts,
-        url: url.into(),
-    })
+    pub fn string_ts(&self) -> String {
+        self.timestamp.format(FORMAT_STRING).to_string()
+    }
+
+    fn get_archive_information_from_name(filename: &str) -> anyhow::Result<ArchiveInfo> {
+        let file_path = PathBuf::from(filename);
+        let name = match file_path.file_name() {
+            Some(n) => n.to_str().unwrap(),
+            None => return Err(anyhow!("invalid file path {:?}", file_path)),
+        };
+
+        //archivoor_<ts>_<url>_<depth>.warc.gz
+        let elems = name.split("_").collect::<Vec<&str>>();
+
+        let depth: u8 = elems[3].split_once(".").unwrap().0.parse()?;
+
+        let ts = NaiveDateTime::parse_from_str(elems[1], FORMAT_STRING)?;
+
+        let url = elems[2];
+
+        Ok(ArchiveInfo {
+            depth: depth,
+            timestamp: ts,
+            url: url.into(),
+        })
+    }
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use archivoor_v1::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
-    utils::{get_archive_information_from_name, get_unix_timestamp},
+    utils::{get_unix_timestamp, ArchiveInfo},
 };
 use arloader::Arweave;
 use atw::state::{ArchiveOptions, ArchiveSubmission};
@@ -107,13 +107,9 @@ async fn main() -> anyhow::Result<()> {
 
         let size = metadata.len();
 
-        println!("{}", size);
-
-        let info = get_archive_information_from_name(&main_file)?;
+        let info = ArchiveInfo::new(&main_file)?;
 
         println!("{:?}  {:?}", info, size);
-
-        // TODO fix timestamp
 
         // let tx_ids = r.run_upload_files(filenames).await?;
 
