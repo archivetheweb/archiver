@@ -22,7 +22,6 @@ pub struct WarcWriter {
     process: std::process::Child,
     archive_dir: PathBuf,
     archive_name: String,
-    persistent: bool,
 }
 
 // Currently we use the wayback process to create our WARC file
@@ -31,7 +30,6 @@ impl WarcWriter {
         port: Option<u16>,
         parent_dir: Option<PathBuf>,
         archive_name: Option<String>,
-        persistent: bool,
         debug: bool,
     ) -> anyhow::Result<Self> {
         let archive_name = if let Some(n) = archive_name {
@@ -139,7 +137,6 @@ impl WarcWriter {
             process,
             archive_dir,
             archive_name,
-            persistent,
         })
     }
 
@@ -187,13 +184,16 @@ impl WarcWriter {
                 let file_name = file_name.to_str().unwrap();
                 if file_name.contains("<unprocessed>") {
                     let name_elems: Vec<&str> = file_name.trim().split("-").collect();
+
+                    // The timestamp on the document is as follows, we remove the
+                    // microseconds from the timestamp. Time is in UTC
+                    // 20230125 160157 993364
+                    // YYYYMMDD HHMMSS Microseconds
+
+                    let ts = name_elems[2].clone().split_at(14).0;
                     // the name matters as we will be using it to
-                    let new_full_name = format!(
-                        "archivoor_{}_{}_{}.warc.gz",
-                        name_elems[2],
-                        encode(new_name),
-                        depth
-                    );
+                    let new_full_name =
+                        format!("archivoor_{}_{}_{}.warc.gz", ts, encode(new_name), depth);
                     let mut new_path = x.path().clone();
                     new_path.pop();
                     new_path.push(&new_full_name);
@@ -218,19 +218,6 @@ impl WarcWriter {
     // pub fn create_index()
 
     pub fn terminate(&mut self) -> anyhow::Result<()> {
-        // TODO
-        if !self.persistent {
-            // let mut d = self.parent_dir.clone();
-            // d.push("collections");
-            // debug!("{}", d.as_os_str().to_str().unwrap());
-            // for entry in fs::read_dir(&d)? {
-            //     debug!("{entry:?}");
-            //     fs::remove_dir_all(entry?.path())?;
-            // }
-            // fs::remove_dir(&d)?;
-            // d.pop();
-            // fs::remove_dir(d)?;
-        }
         debug!("Killing warc writer process with id {}", self.process.id());
         self.process.kill()?;
         Ok(())

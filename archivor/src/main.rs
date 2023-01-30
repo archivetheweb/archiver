@@ -135,6 +135,3 @@ async fn main() -> anyhow::Result<()> {
     }
     Ok(())
 }
-
-// 20230125 160157993364
-// YYYYMMDD HHMMSS

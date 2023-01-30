@@ -28,8 +28,6 @@ pub struct LaunchOptions {
     #[builder(default = "self.default_writer_dir()")]
     writer_dir: Option<PathBuf>,
     #[builder(default = "false")]
-    archive_persistence: bool,
-    #[builder(default = "false")]
     writer_debug: bool,
     #[builder(default = "1")]
     crawl_depth: i32,
@@ -79,7 +77,6 @@ impl Runner {
             lo.writer_port,
             lo.writer_dir.clone(),
             lo.archive_name.clone(),
-            lo.archive_persistence,
             lo.writer_debug,
         )?;
 
