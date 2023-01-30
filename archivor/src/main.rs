@@ -78,10 +78,10 @@ async fn main() -> anyhow::Result<()> {
             None => continue,
         };
 
-        println!("running!");
+        debug!("running for request {:?} ", req);
 
         let options = LaunchOptions::default_builder()
-            .with_upload(false)
+            .with_upload(true)
             .writer_dir(Some(".".into()))
             .writer_port(None)
             .writer_debug(false)
@@ -109,25 +109,25 @@ async fn main() -> anyhow::Result<()> {
 
         let info = ArchiveInfo::new(&main_file)?;
 
-        println!("{:?}  {:?}", info, size);
+        debug!("{:?}  {:?}", info, size);
 
-        // let tx_ids = r.run_upload_files(filenames).await?;
+        let tx_ids = r.run_upload_files(filenames).await?;
 
-        // println!("tx_ids {:?}", tx_ids);
+        debug!("tx_ids {:?}", tx_ids);
 
-        // c.submit_archive(ArchiveSubmission {
-        //     full_url: url.into(),
-        //     size: size as usize,
-        //     uploader_address: wallet_address.clone(),
-        //     archive_request_id: req.id,
-        //     timestamp: info.timestamp,
-        //     arweave_tx: tx_ids[0].clone(),
-        //     options: ArchiveOptions {
-        //         depth: req.crawl_options.depth,
-        //         domain_only: req.crawl_options.domain_only,
-        //     },
-        // })
-        // .await?;
+        c.submit_archive(ArchiveSubmission {
+            full_url: url.into(),
+            size: size as usize,
+            uploader_address: wallet_address.clone(),
+            archive_request_id: req.id,
+            timestamp: info.unix_ts() as usize,
+            arweave_tx: tx_ids[0].clone(),
+            options: ArchiveOptions {
+                depth: req.crawl_options.depth,
+                domain_only: req.crawl_options.domain_only,
+            },
+        })
+        .await?;
     }
     Ok(())
 }
