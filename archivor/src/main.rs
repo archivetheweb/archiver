@@ -1,4 +1,14 @@
-use std::{cmp::Ordering, fs, path::PathBuf, str::FromStr};
+use std::{
+    fs,
+    path::PathBuf,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::sleep,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use archivoor_v1::{
@@ -10,13 +20,18 @@ use arloader::Arweave;
 use atw::state::{ArchiveOptions, ArchiveSubmission};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use cron::Schedule;
-use log::debug;
+use log::{debug, error};
 use reqwest::Url;
+use signal_hook::consts::{SIGINT, SIGTERM};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
     debug!("{}", "In debug mode");
+
+    let should_terminate = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
+    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
 
     let arweave = Arweave::from_keypair_path(
         PathBuf::from("res/test_wallet.json"),
@@ -39,6 +54,25 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow!("Not registered as an uploader"));
     }
 
+    loop {
+        if should_terminate.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        match run(&c, wallet_address.clone()).await {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Error in main loop: {}", e)
+            }
+        };
+        if should_terminate.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        debug!("sleeping for 10 seconds");
+        sleep(Duration::from_secs(10));
+    }
+}
+
+async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
     let requests = c.archiving_requests_for(&wallet_address).await?;
     debug!("Requests: {:#?}", requests);
 
@@ -57,13 +91,20 @@ async fn main() -> anyhow::Result<()> {
     debug!("Valid reqs: {:#?}", valid_reqs);
 
     for req in valid_reqs {
-        // TODO validate frequency
-
-        let schedule = Schedule::from_str(&req.frequency).unwrap();
+        let schedule = match Schedule::from_str(&req.frequency) {
+            Ok(sched) => sched,
+            Err(e) => {
+                error!("invalid schedule for request {:?}, error: {}", req, e);
+                continue;
+            }
+        };
 
         let after = DateTime::<Utc>::from_utc(
-            NaiveDateTime::from_timestamp_opt(req.latest_upload_timestamp.try_into().unwrap(), 0)
-                .unwrap(),
+            NaiveDateTime::from_timestamp_opt(
+                req.latest_upload_timestamp.try_into().unwrap_or(0),
+                0,
+            )
+            .unwrap(),
             Utc,
         );
 
@@ -71,7 +112,7 @@ async fn main() -> anyhow::Result<()> {
 
         match schedule_iter.nth(0) {
             Some(next_time) => {
-                if next_time.cmp(&Utc::now()) == Ordering::Greater {
+                if next_time.cmp(&Utc::now()) == std::cmp::Ordering::Greater {
                     continue;
                 }
             }
@@ -81,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
         debug!("running for request {:?} ", req);
 
         let options = LaunchOptions::default_builder()
-            .with_upload(true)
+            .with_upload(false)
             .writer_dir(Some(".".into()))
             .writer_port(None)
             .writer_debug(false)
@@ -99,7 +140,7 @@ async fn main() -> anyhow::Result<()> {
         let url = &req.crawl_options.urls[0];
 
         let filenames = r.run_crawl(url).await?;
-        println!("filenames {:?}", filenames);
+        debug!("filenames {:?}", filenames);
 
         let main_file = filenames[0].clone();
 
