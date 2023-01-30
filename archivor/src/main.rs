@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let wallet_address = arweave.crypto.wallet_address()?.to_string();
 
     let c = Contract::new(
-        "YQLMJqrN8jTAmuEB_nWqgK9cKT72VwtvTqv7KP7ZOUc".into(),
+        "aBzGaWpXeOQqiVrtECdHrHO_Rn2YvZeeSLdxBOihYag".into(),
         "mainnet",
         arweave,
     )?;
@@ -67,8 +67,9 @@ async fn main() -> anyhow::Result<()> {
         if should_terminate.load(Ordering::Relaxed) {
             return Ok(());
         }
-        debug!("sleeping for 10 seconds");
-        sleep(Duration::from_secs(10));
+        let timeout = 30;
+        debug!("sleeping for {} seconds", timeout);
+        sleep(Duration::from_secs(timeout));
     }
 }
 
@@ -80,7 +81,7 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
 
     // we loop through the request, if one of them is expired, we delete it
     for r in requests {
-        if r.end_timestamp < get_unix_timestamp().as_secs() as usize {
+        if r.end_timestamp < get_unix_timestamp().as_secs() as i64 {
             debug!("deleting archive request with id {}", r.id);
             c.delete_archive_request(&r.id).await?;
             continue;
@@ -122,7 +123,7 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
         debug!("running for request {:?} ", req);
 
         let options = LaunchOptions::default_builder()
-            .with_upload(false)
+            .with_upload(true)
             .writer_dir(Some(".".into()))
             .writer_port(None)
             .writer_debug(false)
@@ -161,7 +162,7 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
             size: size as usize,
             uploader_address: wallet_address.clone(),
             archive_request_id: req.id,
-            timestamp: info.unix_ts() as usize,
+            timestamp: info.unix_ts(),
             arweave_tx: tx_ids[0].clone(),
             options: ArchiveOptions {
                 depth: req.crawl_options.depth,
