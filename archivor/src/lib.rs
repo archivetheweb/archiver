@@ -7,6 +7,7 @@ pub mod browser_controller;
 pub mod contract;
 pub mod crawler;
 pub mod runner;
+pub mod types;
 pub mod uploader;
 pub mod utils;
 pub mod warc_writer;

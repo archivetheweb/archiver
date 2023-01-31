@@ -170,10 +170,11 @@ impl Crawler {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
                 .for_each_concurrent(concurrency as usize, |queued_url| {
                     let (url, depth) = queued_url.clone();
+                    debug!("browsing {} at depth {}", url, depth);
+
                     let ab = active_browsers.clone();
                     let tx = scraped_urls_tx.clone();
                     let failed_url_tx = failed_url_tx.clone();
-                    debug!("browsing {} at depth {}", url, depth);
                     let u = url.clone();
                     let base_url = base_url.clone();
                     let with_screenshot = start_url == u;
