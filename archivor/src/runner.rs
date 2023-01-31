@@ -11,7 +11,13 @@ use anyhow::anyhow;
 use reqwest::Url;
 use signal_hook::consts::{SIGINT, SIGTERM};
 
-use crate::{crawler::Crawler, uploader::Uploader, utils::BASE_URL, warc_writer::WarcWriter};
+use crate::{
+    crawler::Crawler,
+    types::{ArchiveInfo, CrawlResult, CrawlUploadResult},
+    uploader::Uploader,
+    utils::BASE_URL,
+    warc_writer::WarcWriter,
+};
 
 pub struct Runner {
     uploader: Option<Uploader>,
@@ -71,15 +77,6 @@ impl LaunchOptionsBuilder {
     }
 }
 
-#[derive(Debug)]
-pub struct CrawlResult {
-    pub warc_files: Vec<PathBuf>,
-    pub screenshot_file: PathBuf,
-    pub timestamp: String,
-    pub depth: i32,
-    pub domain: String,
-}
-
 impl Runner {
     pub async fn new(lo: LaunchOptions) -> anyhow::Result<Self> {
         let warc_writer = WarcWriter::new(
@@ -109,10 +106,10 @@ impl Runner {
     }
 
     pub async fn run_all(&self, url: &str) -> anyhow::Result<()> {
-        self.run_crawl(url).await?;
+        let crawl = self.run_crawl(url).await?;
 
         if !self.should_terminate.load(Ordering::Relaxed) {
-            self.run_upload_latest().await?;
+            self.run_upload_crawl(crawl).await?;
         }
 
         Ok(())
@@ -160,49 +157,29 @@ impl Runner {
             .warc_writer
             .rename_warc_files(&domain, self.options.crawl_depth)?;
 
-        let ts = files[0].clone();
-        let ts = ts.to_str().unwrap().split("_").nth(1).unwrap();
-        let screenshot_dir =
-            self.warc_writer
-                .organize_screenshot(ts, &domain, self.options.crawl_depth)?;
+        let archive_info = ArchiveInfo::new(&files[0])?;
+
+        let screenshot_dir = self.warc_writer.organize_screenshot(
+            &archive_info.string_ts(),
+            &domain,
+            self.options.crawl_depth,
+        )?;
 
         Ok(CrawlResult {
             warc_files: files,
             screenshot_file: screenshot_dir,
-            timestamp: ts.into(),
-            depth: self.options.crawl_depth,
-            domain: domain,
+            archive_info: archive_info,
         })
     }
 
-    pub async fn run_upload_latest(&self) -> anyhow::Result<(String, String)> {
+    pub async fn run_upload_crawl(&self, crawl: CrawlResult) -> anyhow::Result<CrawlUploadResult> {
         if !self.options.with_upload {
             return Err(anyhow!("no upload option turned on"));
         }
 
         match &self.uploader {
             Some(u) => {
-                let id = u
-                    .upload_latest_file(&self.warc_writer.archive_dir())
-                    .await?;
-                println!(
-                    "ids of the tx are \n File Tx: {} \n Metadata tx: {}",
-                    id.0, id.1
-                );
-                return Ok((id.0, id.1));
-            }
-            None => Err(anyhow!("uploader not defined")),
-        }
-    }
-
-    pub async fn run_upload_files(&self, files: Vec<String>) -> anyhow::Result<Vec<String>> {
-        if !self.options.with_upload {
-            return Err(anyhow!("no upload option turned on"));
-        }
-
-        match &self.uploader {
-            Some(u) => {
-                let ids = u.upload_files(files).await?;
+                let ids = u.upload_crawl_files(crawl).await?;
 
                 return Ok(ids);
             }

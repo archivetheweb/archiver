@@ -1,10 +1,5 @@
-use anyhow::anyhow;
-use chrono::NaiveDateTime;
 use reqwest::Url;
-use std::{
-    path::PathBuf,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const ARCHIVE_DIR: &str = "archivoor";
 pub const BASE_URL: &str = "http://localhost";
@@ -48,59 +43,6 @@ pub fn get_unix_timestamp() -> Duration {
 
 pub fn get_tmp_screenshot_dir(collection_name: &str) -> String {
     format!("/tmp/archivoor_{}.png", collection_name)
-}
-
-const FORMAT_STRING: &str = "%Y%m%d%H%M%S";
-#[derive(Debug)]
-pub struct ArchiveInfo {
-    depth: u8,
-    timestamp: NaiveDateTime,
-    url: String,
-}
-
-impl ArchiveInfo {
-    pub fn new(file: &PathBuf) -> anyhow::Result<Self> {
-        Self::get_archive_information_from_name(file)
-    }
-
-    pub fn depth(&self) -> u8 {
-        self.depth
-    }
-
-    pub fn url(&self) -> String {
-        self.url.clone()
-    }
-
-    pub fn unix_ts(&self) -> i64 {
-        self.timestamp.timestamp()
-    }
-
-    pub fn string_ts(&self) -> String {
-        self.timestamp.format(FORMAT_STRING).to_string()
-    }
-
-    fn get_archive_information_from_name(filename: &PathBuf) -> anyhow::Result<ArchiveInfo> {
-        let file_path = PathBuf::from(filename);
-        let name = match file_path.file_name() {
-            Some(n) => n.to_str().unwrap(),
-            None => return Err(anyhow!("invalid file path {:?}", file_path)),
-        };
-
-        //archivoor_<ts>_<url>_<depth>.warc.gz
-        let elems = name.split("_").collect::<Vec<&str>>();
-
-        let depth: u8 = elems[3].split_once(".").unwrap().0.parse()?;
-
-        let ts = NaiveDateTime::parse_from_str(elems[1], FORMAT_STRING)?;
-
-        let url = elems[2];
-
-        Ok(ArchiveInfo {
-            depth: depth,
-            timestamp: ts,
-            url: url.into(),
-        })
-    }
 }
 
 #[cfg(test)]

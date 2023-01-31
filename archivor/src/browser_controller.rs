@@ -47,8 +47,6 @@ impl BrowserController {
     pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
         let tab = self.browser.wait_for_initial_tab()?;
 
-        let url = format!("{}", url);
-
         let nv = match tab.navigate_to(&url) {
             Ok(t) => t,
             Err(e) => {
@@ -70,7 +68,7 @@ impl BrowserController {
             tab.wait_for_element("a")?;
         };
         let mut rng = rand::thread_rng();
-        let rndm = rng.gen_range(1..5);
+        let rndm = rng.gen_range(3..6);
         debug!("sleeping for {} seconds", rndm);
         sleep(Duration::from_secs(rndm));
 

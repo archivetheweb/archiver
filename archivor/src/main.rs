@@ -14,7 +14,7 @@ use anyhow::anyhow;
 use archivoor_v1::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
-    utils::{get_unix_timestamp, ArchiveInfo},
+    utils::get_unix_timestamp,
 };
 use arloader::Arweave;
 use atw::state::{ArchiveOptions, ArchiveSubmission};
@@ -67,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
         if should_terminate.load(Ordering::Relaxed) {
             return Ok(());
         }
-        let timeout = 30;
+        let timeout = 5;
         debug!("sleeping for {} seconds", timeout);
         sleep(Duration::from_secs(timeout));
     }
@@ -102,7 +102,7 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
 
         let after = DateTime::<Utc>::from_utc(
             NaiveDateTime::from_timestamp_opt(
-                req.latest_upload_timestamp.try_into().unwrap_or(0),
+                req.latest_archived_timestamp.try_into().unwrap_or(0),
                 0,
             )
             .unwrap(),
@@ -128,9 +128,9 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
             .writer_port(None)
             .writer_debug(false)
             .archive_name(None)
-            .crawl_depth(req.crawl_options.depth)
+            .crawl_depth(req.options.depth)
             // todo
-            // .domain_only(req.crawl_options.domain_only)
+            // .domain_only(req.options.domain_only)
             .concurrent_browsers(10)
             .build()?;
 
@@ -138,36 +138,40 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
 
         let r = Runner::new(options).await?;
 
-        let url = &req.crawl_options.urls[0];
+        let url = &req.options.urls[0];
 
-        let filenames = r.run_crawl(url).await?;
-        debug!("filenames {:?}", filenames);
+        let crawl_result = r.run_crawl(url).await?;
+        debug!("crawl_result {:?}", crawl_result);
 
-        let main_file = filenames[0].clone();
+        let main_file = crawl_result.warc_files[0].clone();
 
         let metadata = fs::metadata(&main_file)?;
 
         let size = metadata.len();
 
-        let info = ArchiveInfo::new(&main_file)?;
+        debug!("{:#?}  {:#?}", &crawl_result.archive_info, size);
 
-        debug!("{:?}  {:?}", info, size);
+        let ts = crawl_result.archive_info.unix_ts();
 
-        let tx_ids = r.run_upload_files(filenames).await?;
+        let upload_result = r.run_upload_crawl(crawl_result).await?;
 
-        debug!("tx_ids {:?}", tx_ids);
+        debug!("Upload result {:#?}", upload_result);
+
+        // TODO save the title and a screenshot and add to submission
 
         c.submit_archive(ArchiveSubmission {
             full_url: url.into(),
             size: size as usize,
             uploader_address: wallet_address.clone(),
             archive_request_id: req.id,
-            timestamp: info.unix_ts(),
-            arweave_tx: tx_ids[0].clone(),
+            timestamp: ts,
+            arweave_tx: upload_result.warc_id[0].clone(),
             options: ArchiveOptions {
-                depth: req.crawl_options.depth,
-                domain_only: req.crawl_options.domain_only,
+                depth: req.options.depth,
+                domain_only: req.options.domain_only,
             },
+            screenshot_tx: upload_result.screenshot_id,
+            title: "".into(),
         })
         .await?;
     }
