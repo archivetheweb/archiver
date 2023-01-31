@@ -7,7 +7,6 @@ use std::{
 };
 
 pub const ARCHIVE_DIR: &str = "archivoor";
-pub const BASE_DIR: &str = "collections";
 pub const BASE_URL: &str = "http://localhost";
 
 pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<String>> {
@@ -46,6 +45,10 @@ pub fn get_unix_timestamp() -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
 }
 
+pub fn get_tmp_screenshot_dir(collection_name: &str) -> String {
+    format!("/tmp/archivoor_{}.png", collection_name)
+}
+
 const FORMAT_STRING: &str = "%Y%m%d%H%M%S";
 #[derive(Debug)]
 pub struct ArchiveInfo {
@@ -55,8 +58,8 @@ pub struct ArchiveInfo {
 }
 
 impl ArchiveInfo {
-    pub fn new(filename: &str) -> anyhow::Result<Self> {
-        Self::get_archive_information_from_name(filename)
+    pub fn new(file: &PathBuf) -> anyhow::Result<Self> {
+        Self::get_archive_information_from_name(file)
     }
 
     pub fn depth(&self) -> u8 {
@@ -75,7 +78,7 @@ impl ArchiveInfo {
         self.timestamp.format(FORMAT_STRING).to_string()
     }
 
-    fn get_archive_information_from_name(filename: &str) -> anyhow::Result<ArchiveInfo> {
+    fn get_archive_information_from_name(filename: &PathBuf) -> anyhow::Result<ArchiveInfo> {
         let file_path = PathBuf::from(filename);
         let name = match file_path.file_name() {
             Some(n) => n.to_str().unwrap(),

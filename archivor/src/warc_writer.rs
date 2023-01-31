@@ -17,6 +17,8 @@ use rand::{thread_rng, Rng};
 use redis::Commands;
 use sysinfo::{PidExt, System, SystemExt};
 
+use crate::utils::get_tmp_screenshot_dir;
+
 pub struct WarcWriter {
     port: u16,
     process: std::process::Child,
@@ -174,10 +176,10 @@ impl WarcWriter {
         Ok(dir)
     }
 
-    pub fn rename_files(&self, new_name: &str, depth: i32) -> anyhow::Result<Vec<String>> {
+    pub fn rename_warc_files(&self, new_name: &str, depth: i32) -> anyhow::Result<Vec<PathBuf>> {
         let warcs = self.fetch_all_warcs()?;
 
-        Ok(warcs
+        let filenames = warcs
             .iter()
             .filter_map(|x| {
                 let file_name = x.file_name();
@@ -201,7 +203,7 @@ impl WarcWriter {
                     match fs::rename(x.path(), &new_path) {
                         Ok(_) => {
                             debug!("renamed {} to {}", file_name, new_full_name);
-                            return Some(new_path.to_str().unwrap().into());
+                            return Some(new_path);
                         }
                         Err(e) => {
                             error!("could not rename {} with err: {}", file_name, e);
@@ -211,7 +213,25 @@ impl WarcWriter {
                 }
                 None
             })
-            .collect())
+            .collect::<Vec<PathBuf>>();
+
+        Ok(filenames)
+    }
+
+    pub fn organize_screenshot(
+        &self,
+        ts: &str,
+        domain: &str,
+        depth: i32,
+    ) -> anyhow::Result<PathBuf> {
+        let mut dir = self.archive_dir.clone();
+        dir.pop();
+        dir.push("screenshots");
+        dir.push(format!("archivoor_{}_{}_{}.png", ts, encode(domain), depth));
+        let screenshot_dir = get_tmp_screenshot_dir(&self.archive_name);
+        fs::copy(&screenshot_dir, &dir)?;
+        fs::remove_file(screenshot_dir)?;
+        Ok(dir)
     }
 
     // TODO

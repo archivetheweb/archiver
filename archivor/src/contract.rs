@@ -335,11 +335,13 @@ mod test {
             size: 1,
             uploader_address: UPLOADER_ADDRESS.into(),
             archive_request_id: "ol2dKXgntbxj5PFtbWvgmftCLibrqkjIrraQYzcweFU".into(),
-            timestamp: get_unix_timestamp().as_secs() as usize,
+            timestamp: get_unix_timestamp().as_secs() as i64,
             options: ArchiveOptions {
                 depth: 0,
                 domain_only: false,
             },
+            screenshot_tx: "".into(),
+            title: "".into(),
         };
 
         let s = tokio_test::block_on(c.submit_archive(archive)).unwrap();

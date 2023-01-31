@@ -115,7 +115,7 @@ impl Uploader {
                 None => return Err(anyhow!("invalid file path {:?}", file_path)),
             };
 
-            let info = ArchiveInfo::new(name)?;
+            let info = ArchiveInfo::new(file_path)?;
             let data_len = data.len();
 
             // first we deploy the file data

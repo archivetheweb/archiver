@@ -71,6 +71,15 @@ impl LaunchOptionsBuilder {
     }
 }
 
+#[derive(Debug)]
+pub struct CrawlResult {
+    pub warc_files: Vec<PathBuf>,
+    pub screenshot_file: PathBuf,
+    pub timestamp: String,
+    pub depth: i32,
+    pub domain: String,
+}
+
 impl Runner {
     pub async fn new(lo: LaunchOptions) -> anyhow::Result<Self> {
         let warc_writer = WarcWriter::new(
@@ -127,7 +136,7 @@ impl Runner {
         Ok((base_url, full_url, domain.into()))
     }
 
-    pub async fn run_crawl(&self, url: &str) -> anyhow::Result<Vec<String>> {
+    pub async fn run_crawl(&self, url: &str) -> anyhow::Result<CrawlResult> {
         let (base_url, full_url, domain) = self.prepare_urls(url)?;
 
         info!(
@@ -149,8 +158,21 @@ impl Runner {
         // we rename the files that the warc writer created for easy retrieval
         let files = self
             .warc_writer
-            .rename_files(&domain, self.options.crawl_depth)?;
-        Ok(files)
+            .rename_warc_files(&domain, self.options.crawl_depth)?;
+
+        let ts = files[0].clone();
+        let ts = ts.to_str().unwrap().split("_").nth(1).unwrap();
+        let screenshot_dir =
+            self.warc_writer
+                .organize_screenshot(ts, &domain, self.options.crawl_depth)?;
+
+        Ok(CrawlResult {
+            warc_files: files,
+            screenshot_file: screenshot_dir,
+            timestamp: ts.into(),
+            depth: self.options.crawl_depth,
+            domain: domain,
+        })
     }
 
     pub async fn run_upload_latest(&self) -> anyhow::Result<(String, String)> {
