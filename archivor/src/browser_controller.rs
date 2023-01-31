@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::{thread::sleep, time::Duration};
 use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
 
-use crate::utils::{ARCHIVE_DIR, BASE_DIR};
+use crate::utils::{extract_collection_name, ARCHIVE_DIR, BASE_DIR};
 
 const SCROLL_JS: &str = r#" new Promise((resolve) => {
     var totalHeight = 0;
@@ -75,12 +75,15 @@ impl BrowserController {
         sleep(Duration::from_secs(rndm));
 
         if screenshot {
+            let collection_name = extract_collection_name(&url);
+            debug!("taking screenshot of {}", &url);
+
             let _png =
                 tab.capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)?;
-            fs::write(
-                format!("{}/{}/screenshots/{}.png", BASE_DIR, ARCHIVE_DIR, "a"),
-                _png,
-            )?;
+            let filename = format!("/tmp/archivoor_{}.png", collection_name);
+            debug!("saving temporary screenshot to {}", filename);
+
+            fs::write(filename, _png)?;
         }
 
         debug!("scrolling....");

@@ -34,8 +34,12 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
     }
 }
 
-pub fn extract_url(url: String) -> String {
+pub fn extract_url(url: &str) -> String {
     url.split("record/").nth(1).unwrap().to_string()
+}
+
+pub fn extract_collection_name(url: &str) -> String {
+    url.split("/").nth(3).unwrap().to_string()
 }
 
 pub fn get_unix_timestamp() -> Duration {
@@ -122,5 +126,13 @@ mod test {
         let s = Url::parse("https://archivetheweb.com").unwrap();
 
         assert_eq!(s.to_string(), "https://archivetheweb.com/");
+    }
+
+    #[test]
+    fn extract_collection_name_test() {
+        let s = extract_collection_name(
+            "http://localhost:8272/A5U3DMjDdMz/record/https://example.com.png".into(),
+        );
+        assert_eq!(s, "A5U3DMjDdMz");
     }
 }

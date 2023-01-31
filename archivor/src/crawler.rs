@@ -144,10 +144,7 @@ impl Crawler {
                     debug!("Failed urls: {:#?}", failed);
                 }
 
-                info!(
-                    "crawl of {} completed successfully",
-                    extract_url(self.url.clone())
-                );
+                info!("crawl of {} completed successfully", extract_url(&self.url));
 
                 break;
             }
@@ -168,6 +165,7 @@ impl Crawler {
         debug!("processing....");
         let concurrency = self.concurrent_browsers;
         let base_url = self.base_url.clone();
+        let start_url = self.url.clone();
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
                 .for_each_concurrent(concurrency as usize, |queued_url| {
@@ -178,6 +176,8 @@ impl Crawler {
                     debug!("browsing {} at depth {}", url, depth);
                     let u = url.clone();
                     let base_url = base_url.clone();
+                    let with_screenshot = start_url == u;
+
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
 
@@ -203,8 +203,7 @@ impl Crawler {
                                     Ok(b) => b,
                                     Err(_) => return Ok((vec![], true)),
                                 };
-
-                                let tab = match browser.browse(u.as_str(), false) {
+                                let tab = match browser.browse(u.as_str(), with_screenshot) {
                                     Ok(tab) => tab,
                                     Err(e) => {
                                         warn!("error browsing for {} with err {}", u, e);
