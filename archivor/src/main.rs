@@ -140,20 +140,20 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
 
         let url = &req.options.urls[0];
 
-        let crawl_result = r.run_crawl(url).await?;
-        debug!("crawl_result {:?}", crawl_result);
+        let result = r.run_archiving(url).await?;
+        debug!("result {:?}", result);
 
-        let main_file = crawl_result.warc_files[0].clone();
+        let main_file = result.warc_files[0].clone();
 
         let metadata = fs::metadata(&main_file)?;
 
         let size = metadata.len();
 
-        debug!("{:#?}  {:#?}", &crawl_result.archive_info, size);
+        debug!("{:#?}  {:#?}", &result.archive_info, size);
 
-        let ts = crawl_result.archive_info.unix_ts();
+        let ts = result.archive_info.unix_ts();
 
-        let upload_result = r.run_upload_crawl(crawl_result).await?;
+        let upload_result = r.run_upload_crawl(&result).await?;
 
         debug!("Upload result {:#?}", upload_result);
 
@@ -171,7 +171,7 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
                 domain_only: req.options.domain_only,
             },
             screenshot_tx: upload_result.screenshot_id,
-            title: "".into(),
+            title: result.title,
         })
         .await?;
     }
