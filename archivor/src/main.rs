@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let wallet_address = arweave.crypto.wallet_address()?.to_string();
 
     let c = Contract::new(
-        "aBzGaWpXeOQqiVrtECdHrHO_Rn2YvZeeSLdxBOihYag".into(),
+        "Q-Eb1-CrbZi_pszCec2QafJ6lDO5dtlC53KpoxeGzWM".into(),
         "mainnet",
         arweave,
     )?;
@@ -67,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
         if should_terminate.load(Ordering::Relaxed) {
             return Ok(());
         }
-        let timeout = 5;
+        let timeout = 30;
         debug!("sleeping for {} seconds", timeout);
         sleep(Duration::from_secs(timeout));
     }
