@@ -11,6 +11,7 @@ use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
+    types::CrawlResult,
     utils::{extract_url, normalize_url_map},
 };
 
@@ -22,6 +23,7 @@ pub struct Crawler {
     url: String,
     concurrent_browsers: i32,
     url_retries: i32,
+    main_title: Arc<tokio::sync::Mutex<String>>,
 }
 
 impl Crawler {
@@ -40,10 +42,14 @@ impl Crawler {
             url: url.into(),
             concurrent_browsers,
             url_retries,
+            main_title: Arc::new(tokio::sync::Mutex::new(String::from(""))),
         }
     }
 
-    pub async fn crawl(&mut self, should_terminate: Arc<AtomicBool>) -> anyhow::Result<()> {
+    pub async fn crawl(
+        &mut self,
+        should_terminate: Arc<AtomicBool>,
+    ) -> anyhow::Result<CrawlResult> {
         // we setup a channel for new url
         // this channel will send an (String, Vec<String>,i32) tuple
         // first element being the url visited, next element being all the new urls and last being the depth of the visited_url
@@ -123,36 +129,41 @@ impl Crawler {
                 && visit_url_tx.capacity() == visit_url_tx.max_capacity()
                 && active_browsers.load(Ordering::SeqCst) == 0
             {
-                let failed = self
-                    .failed
-                    .iter()
-                    .filter_map(|x| {
-                        if x.1 >= &self.url_retries {
-                            return Some(x.0.to_owned());
-                        }
-                        None
-                    })
-                    .collect::<Vec<String>>();
-
-                debug!(
-                    "Total of {} sites crawled, {} failed",
-                    self.visited.len(),
-                    failed.len()
-                );
-
-                if failed.len() > 0 {
-                    debug!("Failed urls: {:#?}", failed);
-                }
-
-                info!("crawl of {} completed successfully", extract_url(&self.url));
-
                 break;
             }
 
             sleep(Duration::from_millis(10)).await;
         }
+        let failed = self
+            .failed
+            .iter()
+            .filter_map(|x| {
+                if x.1 >= &self.url_retries {
+                    return Some(x.0.to_owned());
+                }
+                None
+            })
+            .collect::<HashSet<String>>();
 
-        Ok(())
+        debug!(
+            "Total of {} sites crawled, {} failed",
+            self.visited.len(),
+            failed.len()
+        );
+
+        if failed.len() > 0 {
+            debug!("Failed urls: {:#?}", failed);
+        }
+
+        let url = extract_url(&self.url);
+        info!("crawl of {} completed successfully", extract_url(&self.url));
+
+        return Ok(CrawlResult {
+            failed,
+            visited: self.visited.clone(),
+            url,
+            main_title: self.main_title.lock().await.to_string(),
+        });
     }
 
     fn processor(
@@ -166,6 +177,7 @@ impl Crawler {
         let concurrency = self.concurrent_browsers;
         let base_url = self.base_url.clone();
         let start_url = self.url.clone();
+        let m = self.main_title.clone();
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
                 .for_each_concurrent(concurrency as usize, |queued_url| {
@@ -177,7 +189,8 @@ impl Crawler {
                     let failed_url_tx = failed_url_tx.clone();
                     let u = url.clone();
                     let base_url = base_url.clone();
-                    let with_screenshot = start_url == u;
+                    let is_first_url = start_url == u;
+                    let title_mutex = m.clone();
 
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
@@ -204,7 +217,7 @@ impl Crawler {
                                     Ok(b) => b,
                                     Err(_) => return Ok((vec![], true)),
                                 };
-                                let tab = match browser.browse(u.as_str(), with_screenshot) {
+                                let tab = match browser.browse(u.as_str(), is_first_url) {
                                     Ok(tab) => tab,
                                     Err(e) => {
                                         warn!("error browsing for {} with err {}", u, e);
@@ -212,6 +225,14 @@ impl Crawler {
                                         return Ok((vec![], true));
                                     }
                                 };
+
+                                if is_first_url {
+                                    let title = tab.get_title()?;
+                                    let mut main_title = title_mutex.blocking_lock();
+                                    *main_title = title;
+
+                                    println!("title is {}", main_title);
+                                }
 
                                 Ok((
                                     browser

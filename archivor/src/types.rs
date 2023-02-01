@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
@@ -15,6 +15,14 @@ pub struct CrawlUploadResult {
 
 #[derive(Debug)]
 pub struct CrawlResult {
+    pub url: String,
+    pub main_title: String,
+    pub visited: HashSet<String>,
+    pub failed: HashSet<String>,
+}
+
+#[derive(Debug)]
+pub struct CrawlFiles {
     pub warc_files: Vec<PathBuf>,
     pub screenshot_file: PathBuf,
     pub archive_info: ArchiveInfo,

@@ -13,7 +13,7 @@ use signal_hook::consts::{SIGINT, SIGTERM};
 
 use crate::{
     crawler::Crawler,
-    types::{ArchiveInfo, CrawlResult, CrawlUploadResult},
+    types::{ArchiveInfo, CrawlFiles, CrawlUploadResult},
     uploader::Uploader,
     utils::BASE_URL,
     warc_writer::WarcWriter,
@@ -133,7 +133,7 @@ impl Runner {
         Ok((base_url, full_url, domain.into()))
     }
 
-    pub async fn run_crawl(&self, url: &str) -> anyhow::Result<CrawlResult> {
+    pub async fn run_crawl(&self, url: &str) -> anyhow::Result<CrawlFiles> {
         let (base_url, full_url, domain) = self.prepare_urls(url)?;
 
         info!(
@@ -150,7 +150,9 @@ impl Runner {
             self.options.concurrent_browsers,
             self.options.url_retries,
         );
-        crawler.crawl(self.should_terminate.clone()).await?;
+        let crawl = crawler.crawl(self.should_terminate.clone()).await?;
+
+        println!("{:#?}", crawl);
 
         // we rename the files that the warc writer created for easy retrieval
         let files = self
@@ -165,14 +167,14 @@ impl Runner {
             self.options.crawl_depth,
         )?;
 
-        Ok(CrawlResult {
+        Ok(CrawlFiles {
             warc_files: files,
             screenshot_file: screenshot_dir,
             archive_info: archive_info,
         })
     }
 
-    pub async fn run_upload_crawl(&self, crawl: CrawlResult) -> anyhow::Result<CrawlUploadResult> {
+    pub async fn run_upload_crawl(&self, crawl: CrawlFiles) -> anyhow::Result<CrawlUploadResult> {
         if !self.options.with_upload {
             return Err(anyhow!("no upload option turned on"));
         }
