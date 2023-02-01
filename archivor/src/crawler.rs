@@ -230,8 +230,6 @@ impl Crawler {
                                     let title = tab.get_title()?;
                                     let mut main_title = title_mutex.blocking_lock();
                                     *main_title = title;
-
-                                    println!("title is {}", main_title);
                                 }
 
                                 Ok((

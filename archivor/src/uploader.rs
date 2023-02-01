@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    types::{ArchiveInfo, CrawlFiles, CrawlUploadResult},
+    types::{ArchiveInfo, ArchivingResult, CrawlUploadResult},
     utils::get_unix_timestamp,
 };
 
@@ -119,7 +119,10 @@ impl Uploader {
         Ok(latest.path())
     }
 
-    pub async fn upload_crawl_files(&self, crawl: CrawlFiles) -> anyhow::Result<CrawlUploadResult> {
+    pub async fn upload_crawl_files(
+        &self,
+        crawl: &ArchivingResult,
+    ) -> anyhow::Result<CrawlUploadResult> {
         let currency = Ar::new(self.key_path.clone(), None);
         let bundlr = Bundlr::new(Url::parse(BUNDLR_URL).unwrap(), &currency).await;
 

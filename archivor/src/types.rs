@@ -22,10 +22,11 @@ pub struct CrawlResult {
 }
 
 #[derive(Debug)]
-pub struct CrawlFiles {
+pub struct ArchivingResult {
     pub warc_files: Vec<PathBuf>,
     pub screenshot_file: PathBuf,
     pub archive_info: ArchiveInfo,
+    pub title: String,
 }
 
 #[derive(Debug)]
