@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     types::{ArchiveInfo, ArchivingResult, CrawlUploadResult},
-    utils::get_unix_timestamp,
+    utils::{get_unix_timestamp, WARC_APPLICATION_TYPE},
 };
 
 pub struct Uploader {
@@ -182,7 +182,7 @@ impl Uploader {
             name.into(),
             data_len,
             file_tx_id.clone(),
-            "application/warc".into(),
+            WARC_APPLICATION_TYPE.into(),
             Some("gzip".into()),
         );
         let mut mt_tags = append_app_tags(
@@ -294,7 +294,7 @@ fn create_arfs_file_metadata_tags() -> Vec<Tag> {
 fn create_arfs_file_data_tags() -> Vec<Tag> {
     vec![
         // Ardive FS tags
-        Tag::new("Content-Type", "application/warc"),
+        Tag::new("Content-Type", WARC_APPLICATION_TYPE),
     ]
 }
 
