@@ -42,6 +42,8 @@ async fn main() -> anyhow::Result<()> {
 
     let wallet_address = arweave.crypto.wallet_address()?.to_string();
 
+    debug!("Arweave Wallet {} loaded", wallet_address);
+
     // check if we have funds in bundlr
     let res = match reqwest::get(format!(
         "{}/account/balance/arweave?address={}",
