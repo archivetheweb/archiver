@@ -14,6 +14,7 @@ use anyhow::anyhow;
 use archivoor_v1::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
+    types::{BundlrBalance, BUNDLR_URL},
     utils::get_unix_timestamp,
 };
 use arloader::Arweave;
@@ -41,8 +42,24 @@ async fn main() -> anyhow::Result<()> {
 
     let wallet_address = arweave.crypto.wallet_address()?.to_string();
 
+    // check if we have funds in bundlr
+    let res = match reqwest::get(format!(
+        "{}/account/balance/arweave?address={}",
+        BUNDLR_URL, &wallet_address
+    ))
+    .await
+    {
+        Ok(res) => res,
+        Err(e) => return Err(anyhow!(e.to_string())),
+    };
+    let res = res.json::<BundlrBalance>().await?;
+
+    if res.balance == "0" {
+        return Err(anyhow!("no funds in bundlr address {} ", &wallet_address));
+    }
+
     let c = Contract::new(
-        "Q-Eb1-CrbZi_pszCec2QafJ6lDO5dtlC53KpoxeGzWM".into(),
+        "-27RfG2DJAI3ddQlrXkN1rmS5fBSC4eG8Zfhz8skYTU".into(),
         "mainnet",
         arweave,
     )?;

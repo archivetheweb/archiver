@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    types::{ArchiveInfo, ArchivingResult, CrawlUploadResult},
+    types::{
+        ArchiveInfo, ArchivingResult, CrawlUploadResult, BUNDLR_URL, DRIVE_ID, PARENT_FOLDER_ID,
+    },
     utils::{get_unix_timestamp, WARC_APPLICATION_TYPE},
 };
 
@@ -64,11 +66,6 @@ impl ArfsMetadata {
         }
     }
 }
-
-const BUNDLR_URL: &str = "https://node1.bundlr.network";
-
-const DRIVE_ID: &str = "b7db009e-dd28-4546-ba5f-d091e09e2d6e";
-const PARENT_FOLDER_ID: &str = "62afa694-5260-4553-bf39-e09c65a52d9d";
 
 impl Uploader {
     pub async fn new(key_path: PathBuf, currency: &str) -> anyhow::Result<Self> {

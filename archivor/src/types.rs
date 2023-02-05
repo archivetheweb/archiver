@@ -2,8 +2,13 @@ use std::{collections::HashSet, path::PathBuf};
 
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
 
-const FORMAT_STRING: &str = "%Y%m%d%H%M%S";
+pub const FORMAT_STRING: &str = "%Y%m%d%H%M%S";
+pub const BUNDLR_URL: &str = "https://node1.bundlr.network";
+
+pub const DRIVE_ID: &str = "b7db009e-dd28-4546-ba5f-d091e09e2d6e";
+pub const PARENT_FOLDER_ID: &str = "62afa694-5260-4553-bf39-e09c65a52d9d";
 
 #[derive(Debug)]
 pub struct CrawlUploadResult {
@@ -11,6 +16,11 @@ pub struct CrawlUploadResult {
     pub screenshot_metadata_data_id: String,
     pub warc_id: Vec<String>,
     pub warc_metadata_data_id: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BundlrBalance {
+    pub balance: String,
 }
 
 #[derive(Debug)]
