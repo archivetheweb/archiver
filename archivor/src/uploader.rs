@@ -1,13 +1,15 @@
-use sha2::{Digest, Sha256};
+use arloader::{
+    transaction::{FromUtf8Strs, Tag},
+    Arweave,
+};
 use std::{
     fs::{self},
     path::PathBuf,
+    str::FromStr,
     time::SystemTime,
 };
 
 use anyhow::anyhow;
-use base64::{engine::general_purpose, Engine as _};
-use bundlr_sdk::{currency::arweave::Arweave as Ar, tags::Tag, Bundlr};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,8 +22,8 @@ use crate::{
 };
 
 pub struct Uploader {
-    key_path: PathBuf,
     _currency: String,
+    arweave: Arweave,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -79,10 +81,15 @@ impl Uploader {
                 key_path.to_str().unwrap()
             ));
         }
+        let arweave = Arweave::from_keypair_path(
+            key_path.clone(),
+            Url::from_str("https://arweave.net").unwrap(),
+        )
+        .await?;
 
         Ok(Uploader {
-            key_path,
             _currency: currency.to_string(),
+            arweave,
         })
     }
 
@@ -120,23 +127,19 @@ impl Uploader {
         &self,
         crawl: &ArchivingResult,
     ) -> anyhow::Result<CrawlUploadResult> {
-        let currency = Ar::new(self.key_path.clone(), None);
-        let bundlr = Bundlr::new(Url::parse(BUNDLR_URL).unwrap(), &currency).await;
-
         let mut warc_file_ids = vec![];
         let mut warc_metadata_ids = vec![];
 
         // first we do the warc files
         for file_path in &crawl.warc_files {
-            let (file_tx_id, file_metadata_id) = self
-                .upload_warc(&bundlr, file_path, &crawl.archive_info)
-                .await?;
+            let (file_tx_id, file_metadata_id) =
+                self.upload_warc(file_path, &crawl.archive_info).await?;
             warc_file_ids.push(file_tx_id);
             warc_metadata_ids.push(file_metadata_id);
         }
         // then the screenshot
         let (screenshot_id, screenshot_metadata_id) = self
-            .upload_screenshot(&bundlr, &crawl.screenshot_file, &crawl.archive_info)
+            .upload_screenshot(&crawl.screenshot_file, &crawl.archive_info)
             .await?;
 
         Ok(CrawlUploadResult {
@@ -147,9 +150,8 @@ impl Uploader {
         })
     }
 
-    pub async fn upload_warc<'a>(
+    pub async fn upload_warc(
         &self,
-        bundlr: &Bundlr<'a>,
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
     ) -> anyhow::Result<(String, String)> {
@@ -167,13 +169,10 @@ impl Uploader {
             archive_info.unix_ts(),
             archive_info.depth(),
         );
-        tags.push(Tag::new("Content-Encoding", "gzip"));
+        tags.push(Tag::<String>::from_utf8_strs("Content-Encoding", "gzip").unwrap());
 
         // first we deploy the file data
-        let mut file_tx = bundlr.create_transaction(data, tags);
-        bundlr.sign_transaction(&mut file_tx).await?;
-
-        let file_tx_id = get_bundle_id(file_tx.get_signarure());
+        let file_tx_id = self.upload_to_bundlr(data, tags).await?;
 
         let metadata = ArfsMetadata::new(
             name.into(),
@@ -189,24 +188,17 @@ impl Uploader {
             archive_info.depth(),
         );
 
-        mt_tags.push(Tag::new("Content-Encoding", "gzip"));
+        mt_tags.push(Tag::<String>::from_utf8_strs("Content-Encoding", "gzip").unwrap());
 
-        let mut metadata_tx =
-            bundlr.create_transaction(serde_json::to_vec(&metadata).unwrap(), mt_tags);
-        bundlr.sign_transaction(&mut metadata_tx).await?;
-
-        let metadata_tx_id = get_bundle_id(metadata_tx.get_signarure());
-        let file_tx_res = bundlr.send_transaction(file_tx).await?;
-        debug!("bundlr first tx {:?}", file_tx_res);
-        let metadata_tx_res = bundlr.send_transaction(metadata_tx).await?;
-        debug!("bundlr metadata tx {:?}", metadata_tx_res);
+        let metadata_tx_id = self
+            .upload_to_bundlr(serde_json::to_vec(&metadata).unwrap(), mt_tags)
+            .await?;
 
         return Ok((file_tx_id, metadata_tx_id));
     }
 
     pub async fn upload_screenshot<'a>(
         &self,
-        bundlr: &Bundlr<'a>,
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
     ) -> anyhow::Result<(String, String)> {
@@ -219,18 +211,17 @@ impl Uploader {
         let sc_data_len = screenshot_data.len();
 
         // first we deploy the file data
-        let mut screenshot_file_tx = bundlr.create_transaction(
-            screenshot_data,
-            append_app_tags(
-                create_arfs_file_data_tags(),
-                &archive_info.url(),
-                archive_info.unix_ts(),
-                archive_info.depth(),
-            ),
-        );
-        bundlr.sign_transaction(&mut screenshot_file_tx).await?;
-
-        let screenshot_file_tx_id = get_bundle_id(screenshot_file_tx.get_signarure());
+        let screenshot_file_tx_id = self
+            .upload_to_bundlr(
+                screenshot_data,
+                append_app_tags(
+                    create_arfs_file_data_tags(),
+                    &archive_info.url(),
+                    archive_info.unix_ts(),
+                    archive_info.depth(),
+                ),
+            )
+            .await?;
 
         let metadata = ArfsMetadata::new(
             screenshot_name.into(),
@@ -240,64 +231,86 @@ impl Uploader {
             None,
         );
 
-        let mut screenshot_metadata_tx = bundlr.create_transaction(
-            serde_json::to_vec(&metadata).unwrap(),
-            append_app_tags(
-                create_arfs_file_metadata_tags(),
-                &archive_info.url(),
-                archive_info.unix_ts(),
-                archive_info.depth(),
-            ),
-        );
-        bundlr.sign_transaction(&mut screenshot_metadata_tx).await?;
-
-        let screenshot_metadata_tx_id = get_bundle_id(screenshot_metadata_tx.get_signarure());
-        let file_tx_res = bundlr.send_transaction(screenshot_file_tx).await?;
-        debug!("screenshot bundlr first tx {:?}", file_tx_res);
-        let metadata_tx_res = bundlr.send_transaction(screenshot_metadata_tx).await?;
-        debug!("screenshot bundlr metadata tx {:?}", metadata_tx_res);
+        let screenshot_metadata_tx_id = self
+            .upload_to_bundlr(
+                serde_json::to_vec(&metadata).unwrap(),
+                append_app_tags(
+                    create_arfs_file_metadata_tags(),
+                    &archive_info.url(),
+                    archive_info.unix_ts(),
+                    archive_info.depth(),
+                ),
+            )
+            .await?;
 
         return Ok((screenshot_file_tx_id, screenshot_metadata_tx_id));
     }
+
+    async fn upload_to_bundlr(
+        &self,
+        data: Vec<u8>,
+        tags: Vec<Tag<String>>,
+    ) -> anyhow::Result<String> {
+        let file_tx = self.arweave.create_data_item(data, tags, false)?;
+
+        let file_tx = self.arweave.sign_data_item(file_tx)?;
+        let file_tx_id = file_tx.id.to_string();
+
+        let client = reqwest::Client::new();
+        match client
+            .post(format!("{}/tx/arweave", BUNDLR_URL))
+            .header("Content-Type", "application/octet-stream")
+            .body(file_tx.serialize().unwrap())
+            .send()
+            .await
+        {
+            Ok(res) => {
+                let res = res.text().await.unwrap();
+                debug!("{res}")
+            }
+            Err(e) => return Err(anyhow!(e.to_string())),
+        }
+
+        Ok(file_tx_id)
+    }
 }
 
-fn append_app_tags(mut tags: Vec<Tag>, url: &str, timestamp: i64, depth: u8) -> Vec<Tag> {
+fn append_app_tags(
+    mut tags: Vec<Tag<String>>,
+    url: &str,
+    timestamp: i64,
+    depth: u8,
+) -> Vec<Tag<String>> {
     let mut t = vec![
         // App Tags
-        Tag::new("App-Name", "atw"),
-        Tag::new("App-Version", "0.0.1_beta"),
-        Tag::new("Url", url.into()),
-        Tag::new("Timestamp", &format!("{}", timestamp)),
-        Tag::new("Crawl-Depth", &format!("{}", depth)),
+        Tag::<String>::from_utf8_strs("App-Name", "atw").unwrap(),
+        Tag::<String>::from_utf8_strs("App-Version", "0.0.1_beta").unwrap(),
+        Tag::<String>::from_utf8_strs("Url", url.into()).unwrap(),
+        Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
+        Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
     ];
     tags.append(&mut t);
     return tags;
 }
 
-fn create_arfs_file_metadata_tags() -> Vec<Tag> {
+fn create_arfs_file_metadata_tags() -> Vec<Tag<String>> {
     vec![
         // Ardrive FS tags
-        Tag::new("ArFS", "0.11"),
-        Tag::new("App-Version", "0.0.1_beta"),
-        Tag::new("Content-Type", "application/json"),
-        Tag::new("Drive-Id", DRIVE_ID),
-        Tag::new("Entity-Type", "file"),
-        Tag::new("File-Id", &Uuid::new_v4().to_string()),
-        Tag::new("Parent-Folder-Id", PARENT_FOLDER_ID),
-        Tag::new("Unix-Time", &get_unix_timestamp().as_secs().to_string()),
+        Tag::<String>::from_utf8_strs("ArFS", "0.11").unwrap(),
+        Tag::<String>::from_utf8_strs("App-Version", "0.0.1_beta").unwrap(),
+        Tag::<String>::from_utf8_strs("Content-Type", "application/json").unwrap(),
+        Tag::<String>::from_utf8_strs("Drive-Id", DRIVE_ID).unwrap(),
+        Tag::<String>::from_utf8_strs("Entity-Type", "file").unwrap(),
+        Tag::<String>::from_utf8_strs("File-Id", &Uuid::new_v4().to_string()).unwrap(),
+        Tag::<String>::from_utf8_strs("Parent-Folder-Id", PARENT_FOLDER_ID).unwrap(),
+        Tag::<String>::from_utf8_strs("Unix-Time", &get_unix_timestamp().as_secs().to_string())
+            .unwrap(),
     ]
 }
 
-fn create_arfs_file_data_tags() -> Vec<Tag> {
+fn create_arfs_file_data_tags() -> Vec<Tag<String>> {
     vec![
         // Ardive FS tags
-        Tag::new("Content-Type", WARC_APPLICATION_TYPE),
+        Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
     ]
-}
-
-fn get_bundle_id(signature: Vec<u8>) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(signature);
-    let result = hasher.finalize();
-    general_purpose::URL_SAFE_NO_PAD.encode(result)
 }
