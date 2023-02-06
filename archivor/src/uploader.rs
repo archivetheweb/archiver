@@ -2,11 +2,13 @@ use arloader::{
     transaction::{FromUtf8Strs, Tag},
     Arweave,
 };
+use futures::StreamExt;
+use itertools::Itertools;
 use std::{
     fs::{self},
     path::PathBuf,
     str::FromStr,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::anyhow;
@@ -252,28 +254,108 @@ impl Uploader {
         tags: Vec<Tag<String>>,
     ) -> anyhow::Result<String> {
         let file_tx = self.arweave.create_data_item(data, tags, false)?;
-
         let file_tx = self.arweave.sign_data_item(file_tx)?;
         let file_tx_id = file_tx.id.to_string();
 
         let client = reqwest::Client::new();
-        match client
-            .post(format!("{}/tx/arweave", BUNDLR_URL))
-            .header("Content-Type", "application/octet-stream")
-            .body(file_tx.serialize().unwrap())
+
+        let data = file_tx.serialize()?;
+        let size = data.len();
+
+        // if file_tx.data.0.len() < CHUNKING_THRESHOLD {
+        //     match client
+        //         .post(format!("{}/tx/arweave", BUNDLR_URL))
+        //         .header("Content-Type", "application/octet-stream")
+        //         .body(file_tx.serialize().unwrap())
+        //         .send()
+        //         .await
+        //     {
+        //         Ok(res) => {
+        //             let res = res.text().await.unwrap();
+        //             debug!("{res}")
+        //         }
+        //         Err(e) => return Err(anyhow!(e.to_string())),
+        //     }
+
+        //     return Ok(file_tx_id);
+        // } else {
+        // chunk the data
+
+        let upload_info = client
+            .get(format!("{}/chunks/arweave/-1/-1", BUNDLR_URL))
+            .header("x-chunking-version", "2")
             .send()
-            .await
-        {
-            Ok(res) => {
-                let res = res.text().await.unwrap();
-                debug!("{res}")
-            }
-            Err(e) => return Err(anyhow!(e.to_string())),
+            .await?;
+        let upload_info = upload_info.json::<BundlrUploadID>().await?;
+        let upload_id = upload_info.id;
+
+        if size < upload_info.min || size > upload_info.max {
+            return Err(anyhow!(
+                "Chunk size out of allowed range: {} - {}, currently {}",
+                upload_info.min,
+                upload_info.max,
+                size
+            ));
         }
 
-        Ok(file_tx_id)
+        let data = data.into_iter().chunks(upload_info.min);
+        let data = data.into_iter().enumerate();
+
+        let uid = upload_id.clone();
+        let mut stream = tokio_stream::iter(data)
+            .map(move |p| {
+                client
+                    .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, p.0))
+                    .header("Content-Type", "application/octet-stream")
+                    .header("x-chunking-version", "2")
+                    .body(p.1.collect::<Vec<u8>>())
+                    .send()
+            })
+            .buffer_unordered(100);
+
+        let mut counter = 0;
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(res) => {
+                    println!("{:?}", res.text().await);
+                    if counter == 0 {
+                        println!("{}", "started");
+                    }
+                    counter += 1;
+                }
+                Err(e) => println!("{:#?}", e),
+            }
+        }
+
+        let new_c = reqwest::Client::new();
+
+        let finish = new_c
+            .post(format!("{}/chunks/arweave/{}/-1", BUNDLR_URL, upload_id))
+            .header("x-chunking-version", "2")
+            .header("Content-Type", "application/octet-stream")
+            .timeout(Duration::from_secs(40))
+            .send()
+            .await?;
+
+        let status = finish.status();
+
+        debug!("Status: {}", status);
+        debug!("Upload ID: {}", upload_id);
+
+        debug!("Finish upload {:#?}", finish.text().await);
+
+        return Ok(file_tx_id);
+        // }
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct BundlrUploadID {
+    pub id: String,
+    pub min: usize,
+    pub max: usize,
+}
+const CHUNKING_THRESHOLD: usize = 50_000_000;
 
 fn append_app_tags(
     mut tags: Vec<Tag<String>>,
@@ -313,4 +395,25 @@ fn create_arfs_file_data_tags() -> Vec<Tag<String>> {
         // Ardive FS tags
         Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
     ]
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn test_upload_large_data_item() {
+        let u = tokio_test::block_on(Uploader::new(
+            PathBuf::from_str("res/test_wallet.json").unwrap(),
+            "arweave",
+        ))
+        .unwrap();
+
+        let d = fs::read("res/archivoor_20230205143707_bbc.com_1.warc.gz").unwrap();
+
+        let r = tokio_test::block_on(u.upload_to_bundlr(d, vec![])).unwrap();
+
+        println!("{:?}", r)
+    }
 }
