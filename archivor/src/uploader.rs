@@ -7,12 +7,19 @@ use itertools::Itertools;
 use std::{
     fs::{self},
     path::PathBuf,
+    rc::Rc,
     str::FromStr,
+    sync::Arc,
     time::{Duration, SystemTime},
+};
+use tokio::sync::mpsc;
+use tokio_retry::{
+    strategy::{jitter, ExponentialBackoff},
+    Retry,
 };
 
 use anyhow::anyhow;
-use reqwest::Url;
+use reqwest::{Response, Url};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -298,34 +305,49 @@ impl Uploader {
             ));
         }
 
-        let data = data.into_iter().chunks(upload_info.min);
-        let data = data.into_iter().enumerate();
+        let data = data
+            .into_iter()
+            .chunks(upload_info.min)
+            .into_iter()
+            .map(|x| x.collect::<Vec<u8>>())
+            .collect::<Vec<Vec<u8>>>();
 
-        let uid = upload_id.clone();
-        let mut stream = tokio_stream::iter(data)
-            .map(move |p| {
-                client
-                    .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, p.0))
-                    .header("Content-Type", "application/octet-stream")
-                    .header("x-chunking-version", "2")
-                    .body(p.1.collect::<Vec<u8>>())
-                    .send()
-            })
-            .buffer_unordered(100);
-
-        let mut counter = 0;
-        while let Some(result) = stream.next().await {
-            match result {
-                Ok(res) => {
-                    println!("{:?}", res.text().await);
-                    if counter == 0 {
-                        println!("{}", "started");
-                    }
-                    counter += 1;
-                }
-                Err(e) => println!("{:#?}", e),
+        let (chunks_tx, chunks_rx) = mpsc::channel::<(usize, Vec<u8>)>(1000);
+        let tx = chunks_tx.clone();
+        tokio::spawn(async move {
+            for chunk in data.into_iter().enumerate() {
+                tx.send(chunk).await.unwrap();
             }
-        }
+        });
+
+        tokio_stream::wrappers::ReceiverStream::new(chunks_rx)
+            .for_each_concurrent(100, |p| {
+                let client = client.clone();
+                let uid = upload_id.clone();
+                let chunks_tx = chunks_tx.clone();
+
+                async move {
+                    // TODO figure out a way not to clone the body
+                    let res = client
+                        .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, p.0))
+                        .header("Content-Type", "application/octet-stream")
+                        .header("x-chunking-version", "2")
+                        .body(p.1.clone())
+                        .send()
+                        .await;
+
+                    match res {
+                        Ok(res) => {
+                            println!("{:?}", res.text().await);
+                        }
+                        Err(e) => {
+                            println!("{:#?}", e);
+                            chunks_tx.send(p).await.unwrap();
+                        }
+                    }
+                }
+            })
+            .await;
 
         let new_c = reqwest::Client::new();
 
