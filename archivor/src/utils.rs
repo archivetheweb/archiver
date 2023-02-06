@@ -1,3 +1,4 @@
+use rand::Rng;
 use reqwest::Url;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -27,6 +28,12 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
             }
         }
     }
+}
+
+pub fn jitter(duration: Duration) -> Duration {
+    let mut rng = rand::thread_rng();
+    let rndm = rng.gen_range(1.0..10.0);
+    duration.mul_f64(rndm)
 }
 
 pub fn extract_url(url: &str) -> String {

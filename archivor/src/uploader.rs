@@ -7,19 +7,13 @@ use itertools::Itertools;
 use std::{
     fs::{self},
     path::PathBuf,
-    rc::Rc,
     str::FromStr,
-    sync::Arc,
     time::{Duration, SystemTime},
 };
-use tokio::sync::mpsc;
-use tokio_retry::{
-    strategy::{jitter, ExponentialBackoff},
-    Retry,
-};
+use tokio_retry::{strategy::FixedInterval, Retry};
 
 use anyhow::anyhow;
-use reqwest::{Response, Url};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -27,7 +21,7 @@ use crate::{
     types::{
         ArchiveInfo, ArchivingResult, CrawlUploadResult, BUNDLR_URL, DRIVE_ID, PARENT_FOLDER_ID,
     },
-    utils::{get_unix_timestamp, WARC_APPLICATION_TYPE},
+    utils::{get_unix_timestamp, jitter, WARC_APPLICATION_TYPE},
 };
 
 pub struct Uploader {
@@ -196,9 +190,9 @@ impl Uploader {
             archive_info.unix_ts(),
             archive_info.depth(),
         );
-
         mt_tags.push(Tag::<String>::from_utf8_strs("Content-Encoding", "gzip").unwrap());
 
+        // then the metadata
         let metadata_tx_id = self
             .upload_to_bundlr(serde_json::to_vec(&metadata).unwrap(), mt_tags)
             .await?;
@@ -269,105 +263,110 @@ impl Uploader {
         let data = file_tx.serialize()?;
         let size = data.len();
 
-        // if file_tx.data.0.len() < CHUNKING_THRESHOLD {
-        //     match client
-        //         .post(format!("{}/tx/arweave", BUNDLR_URL))
-        //         .header("Content-Type", "application/octet-stream")
-        //         .body(file_tx.serialize().unwrap())
-        //         .send()
-        //         .await
-        //     {
-        //         Ok(res) => {
-        //             let res = res.text().await.unwrap();
-        //             debug!("{res}")
-        //         }
-        //         Err(e) => return Err(anyhow!(e.to_string())),
-        //     }
-
-        //     return Ok(file_tx_id);
-        // } else {
-        // chunk the data
-
-        let upload_info = client
-            .get(format!("{}/chunks/arweave/-1/-1", BUNDLR_URL))
-            .header("x-chunking-version", "2")
-            .send()
-            .await?;
-        let upload_info = upload_info.json::<BundlrUploadID>().await?;
-        let upload_id = upload_info.id;
-
-        if size < upload_info.min || size > upload_info.max {
-            return Err(anyhow!(
-                "Chunk size out of allowed range: {} - {}, currently {}",
-                upload_info.min,
-                upload_info.max,
-                size
-            ));
-        }
-
-        let data = data
-            .into_iter()
-            .chunks(upload_info.min)
-            .into_iter()
-            .map(|x| x.collect::<Vec<u8>>())
-            .collect::<Vec<Vec<u8>>>();
-
-        let (chunks_tx, chunks_rx) = mpsc::channel::<(usize, Vec<u8>)>(1000);
-        let tx = chunks_tx.clone();
-        tokio::spawn(async move {
-            for chunk in data.into_iter().enumerate() {
-                tx.send(chunk).await.unwrap();
+        // if the data size if small, we can send it straight to bundlr
+        if size < CHUNKING_THRESHOLD {
+            match client
+                .post(format!("{}/tx/arweave", BUNDLR_URL))
+                .header("Content-Type", "application/octet-stream")
+                .body(file_tx.serialize().unwrap())
+                .send()
+                .await
+            {
+                Ok(res) => {
+                    let res = res.text().await.unwrap();
+                    debug!("{res}")
+                }
+                Err(e) => return Err(anyhow!(e.to_string())),
             }
-        });
 
-        tokio_stream::wrappers::ReceiverStream::new(chunks_rx)
-            .for_each_concurrent(100, |p| {
-                let client = client.clone();
-                let uid = upload_id.clone();
-                let chunks_tx = chunks_tx.clone();
+            return Ok(file_tx_id);
+        } else {
+            // otherwise we need to chunk the data and send it
+            let upload_info = client
+                .get(format!("{}/chunks/arweave/-1/-1", BUNDLR_URL))
+                .header("x-chunking-version", "2")
+                .send()
+                .await?;
+            let upload_info = upload_info.json::<BundlrUploadID>().await?;
+            let upload_id = upload_info.id;
 
-                async move {
-                    // TODO figure out a way not to clone the body
-                    let res = client
-                        .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, p.0))
-                        .header("Content-Type", "application/octet-stream")
-                        .header("x-chunking-version", "2")
-                        .body(p.1.clone())
-                        .send()
-                        .await;
+            debug!("Upload ID: {}", upload_id);
 
-                    match res {
-                        Ok(res) => {
-                            println!("{:?}", res.text().await);
+            if size < upload_info.min || size > upload_info.max {
+                return Err(anyhow!(
+                    "Chunk size out of allowed range: {} - {}, currently {}",
+                    upload_info.min,
+                    upload_info.max,
+                    size
+                ));
+            }
+
+            let data = data
+                .into_iter()
+                .chunks(upload_info.min)
+                .into_iter()
+                .map(|x| x.collect::<Vec<u8>>())
+                .collect::<Vec<Vec<u8>>>();
+
+            let mut stream = tokio_stream::iter(data.iter().enumerate())
+                .map(|p| {
+                    let retry_strategy = FixedInterval::from_millis(20)
+                        .map(jitter) // add jitter to delays
+                        .take(5);
+                    let index = p.0;
+                    let uid = upload_id.clone();
+                    let client = client.clone();
+                    Retry::spawn(retry_strategy, move || {
+                        client
+                            .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, index))
+                            .header("Content-Type", "application/octet-stream")
+                            .header("x-chunking-version", "2")
+                            .timeout(Duration::from_secs(20))
+                            .body(p.1.clone())
+                            .send()
+                    })
+                })
+                .buffer_unordered(10);
+
+            let mut counter = 0;
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok(res) => {
+                        println!("{:?}", res.text().await);
+                        if counter == 0 {
+                            debug!("{}", "started");
                         }
-                        Err(e) => {
-                            println!("{:#?}", e);
-                            chunks_tx.send(p).await.unwrap();
-                        }
+                        counter += 1;
+                    }
+                    Err(e) => {
+                        return Err(anyhow!("could not upload chunk with error: {}", e));
                     }
                 }
-            })
-            .await;
+            }
+            debug!("Uploaded {} chunks", counter);
 
-        let new_c = reqwest::Client::new();
+            let finish = client
+                .post(format!("{}/chunks/arweave/{}/-1", BUNDLR_URL, upload_id))
+                .header("x-chunking-version", "2")
+                .header("Content-Type", "application/octet-stream")
+                .timeout(Duration::from_secs(40))
+                .send()
+                .await?;
 
-        let finish = new_c
-            .post(format!("{}/chunks/arweave/{}/-1", BUNDLR_URL, upload_id))
-            .header("x-chunking-version", "2")
-            .header("Content-Type", "application/octet-stream")
-            .timeout(Duration::from_secs(40))
-            .send()
-            .await?;
+            let status = finish.status();
+            let res = finish.text().await?;
 
-        let status = finish.status();
+            if status.as_u16() >= 300 {
+                return Err(anyhow!(res));
+            }
 
-        debug!("Status: {}", status);
-        debug!("Upload ID: {}", upload_id);
+            debug!(
+                "Successfully uploaded tx \n Status: {:#} \n Response: {:#}",
+                status, res
+            );
 
-        debug!("Finish upload {:#?}", finish.text().await);
-
-        return Ok(file_tx_id);
-        // }
+            return Ok(file_tx_id);
+        }
     }
 }
 
@@ -432,7 +431,7 @@ mod test {
         ))
         .unwrap();
 
-        let d = fs::read("res/archivoor_20230205143707_bbc.com_1.warc.gz").unwrap();
+        let d = fs::read("res/5MB.zip").unwrap();
 
         let r = tokio_test::block_on(u.upload_to_bundlr(d, vec![])).unwrap();
 
