@@ -262,8 +262,9 @@ impl Crawler {
                                 return;
                             }
                         };
-                        // if there was an error
-                        // we send it to the failed url channel
+                        // the boolean in the second element of the tuple
+                        // tells us whether there was an error or not
+                        // if so, we send the url to the failed url channel
                         if links.1 {
                             match failed_url_tx.send((url, depth)).await {
                                 Ok(_) => {}

@@ -110,7 +110,6 @@ impl WarcWriter {
                             warn!("error sending message to wayback thread: {}", e)
                         }
                     }
-                    // return;
                 }
             }
         });
@@ -234,7 +233,7 @@ impl WarcWriter {
         Ok(dir)
     }
 
-    // TODO
+    // TODO have wayback create an index for the urls
     // pub fn create_index()
 
     pub fn terminate(&mut self) -> anyhow::Result<()> {
