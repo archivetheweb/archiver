@@ -173,7 +173,6 @@ impl Crawler {
         failed_url_tx: mpsc::Sender<(String, i32)>,
         active_browsers: Arc<AtomicUsize>,
     ) {
-        debug!("processing....");
         let concurrency = self.concurrent_browsers;
         let base_url = self.base_url.clone();
         let start_url = self.url.clone();

@@ -133,6 +133,8 @@ impl Uploader {
         let mut warc_file_ids = vec![];
         let mut warc_metadata_ids = vec![];
 
+        // TODO make these recursive bundles
+
         // first we do the warc files
         for file_path in &crawl.warc_files {
             let (file_tx_id, file_metadata_id) =

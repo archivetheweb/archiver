@@ -148,7 +148,6 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
             .writer_debug(false)
             .archive_name(None)
             .crawl_depth(req.options.depth)
-            // todo
             // .domain_only(req.options.domain_only)
             .concurrent_browsers(10)
             .build()?;
@@ -175,8 +174,6 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
         let upload_result = r.run_upload_crawl(&result).await?;
 
         debug!("Upload result {:#?}", upload_result);
-
-        // TODO save the title and a screenshot and add to submission
 
         c.submit_archive(ArchiveSubmission {
             full_url: url.into(),
