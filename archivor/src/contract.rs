@@ -1,5 +1,3 @@
-// use crate::
-
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::anyhow;
@@ -20,6 +18,8 @@ pub struct Contract {
     interactor: Interactor,
     reader: WarpDRE,
 }
+
+const FUNCTION: &str = "function";
 
 impl Contract {
     pub fn new(contract_id: &str, environment: &str, arweave: Arweave) -> anyhow::Result<Self> {
@@ -136,7 +136,7 @@ impl Contract {
         let mut v = serde_json::to_value(uploader)?;
         let t = v.as_object_mut().unwrap();
         t.insert(
-            "function".into(),
+            FUNCTION.into(),
             serde_json::Value::String("registerUploader".into()),
         );
 
@@ -152,7 +152,7 @@ impl Contract {
         let mut v = serde_json::to_value(archive)?;
         let t = v.as_object_mut().unwrap();
         t.insert(
-            "function".into(),
+            FUNCTION.into(),
             serde_json::Value::String("submitArchive".into()),
         );
 
@@ -168,7 +168,7 @@ impl Contract {
         let mut v = serde_json::to_value(archive)?;
         let t = v.as_object_mut().unwrap();
         t.insert(
-            "function".into(),
+            FUNCTION.into(),
             serde_json::Value::String("requestArchiving".into()),
         );
 
@@ -187,7 +187,7 @@ impl Contract {
         let mut v = serde_json::to_value(archive)?;
         let t = v.as_object_mut().unwrap();
         t.insert(
-            "function".into(),
+            FUNCTION.into(),
             serde_json::Value::String("deleteArchiveRequest".into()),
         );
 
