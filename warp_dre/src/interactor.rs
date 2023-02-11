@@ -1,4 +1,3 @@
-// interacts with a warp contract.
 use anyhow::anyhow;
 use arloader::{
     transaction::{Base64, FromUtf8Strs, Tag},
@@ -58,7 +57,6 @@ impl Interactor {
         })
     }
 
-    // TODO validate the input (based on contract actions?)
     pub async fn interact(&self, input: Value) -> anyhow::Result<InteractionResponse> {
         let tx = self
             .arweave
@@ -73,7 +71,6 @@ impl Interactor {
 
         let tx = self.arweave.sign_transaction(tx)?;
 
-        // now we post to the client
         let res = self
             .client
             .post(format!(
@@ -111,10 +108,3 @@ impl Interactor {
         ]
     }
 }
-
-// Interaction example https://arweave.app/tx/vJD6wxgynBgA4oDPaKPhEarKpQiw5ZMikv2-qUXCNtY
-// https://sonar.warp.cc/#/app/interaction/2wXJx9r1_epUgWzyVXWVSS7XqsWZV7cKDCB_jUB7f-I
-// https://github.com/warp-contracts/warp-dre-node
-// https://github.com/warp-contracts/gateway/blob/main/src/gateway/router/gatewayRouter.ts
-
-// Example contract 8iOzf88NnWPk2h45QsqRhtKm0wM1z_a97O2oKgTfOio (mainnet)

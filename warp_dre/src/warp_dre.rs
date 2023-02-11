@@ -26,7 +26,6 @@ impl WarpDREOptions {
 
 impl WarpDREOptionsBuilder {
     fn default_url(&self) -> Url {
-        // https://dre-2.warp.cc/
         Url::from_str("https://dre-1.warp.cc").unwrap()
     }
     fn default_client(&self) -> Client {
