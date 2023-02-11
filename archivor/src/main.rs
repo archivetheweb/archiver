@@ -108,8 +108,6 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
         valid_reqs.push(r);
     }
 
-    // debug!("Valid reqs: {:#?}", valid_reqs);
-
     for req in valid_reqs {
         let schedule = match Schedule::from_str(&req.frequency) {
             Ok(sched) => sched,
