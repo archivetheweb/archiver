@@ -314,6 +314,7 @@ fn create_random_tmp_folder() -> anyhow::Result<PathBuf> {
     Ok(path)
 }
 
+// Wayback config necessary for the application to work as desired
 fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
     let cfg = r#"
     collections_root: collections
