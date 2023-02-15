@@ -1,4 +1,5 @@
 use rand::seq::SliceRandom;
+use rand::thread_rng;
 use std::{
     ffi::OsStr,
     fs::{self, DirEntry},
@@ -9,15 +10,14 @@ use std::{
     sync::mpsc::sync_channel,
     thread::{self},
 };
+
 use urlencoding::encode;
 extern crate redis;
 use anyhow::anyhow;
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
 use redis::Commands;
 use sysinfo::{PidExt, System, SystemExt};
 
-use crate::utils::get_tmp_screenshot_dir;
+use crate::utils::{get_random_string, get_tmp_screenshot_dir};
 
 pub struct WarcWriter {
     port: u16,
@@ -342,14 +342,6 @@ fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
     fs::write(p, cfg)?;
 
     Ok(())
-}
-
-fn get_random_string(len: i32) -> String {
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(len as usize)
-        .map(char::from)
-        .collect()
 }
 
 #[cfg(test)]

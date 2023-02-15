@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use reqwest::Url;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -50,6 +50,14 @@ pub fn get_unix_timestamp() -> Duration {
 
 pub fn get_tmp_screenshot_dir(collection_name: &str) -> String {
     format!("/tmp/archivoor_{}.png", collection_name)
+}
+
+pub fn get_random_string(len: i32) -> String {
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(len as usize)
+        .map(char::from)
+        .collect()
 }
 
 #[cfg(test)]
