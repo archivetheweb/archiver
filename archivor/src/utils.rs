@@ -1,6 +1,10 @@
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use reqwest::Url;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    fs,
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 pub const ARCHIVE_DIR: &str = "archivoor";
 pub const BASE_URL: &str = "http://localhost";
@@ -60,6 +64,15 @@ pub fn get_random_string(len: i32) -> String {
         .collect()
 }
 
+pub fn create_random_tmp_folder() -> anyhow::Result<PathBuf> {
+    let rand_folder_name: String = get_random_string(11);
+
+    let path = PathBuf::from(format!("/tmp/archivoor-{}", rand_folder_name));
+    fs::create_dir(&path)?;
+    // populate this folder with a config.yaml
+    Ok(path)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -95,5 +108,13 @@ mod test {
             "http://localhost:8272/A5U3DMjDdMz/record/https://example.com.png".into(),
         );
         assert_eq!(s, "A5U3DMjDdMz");
+    }
+
+    #[test]
+    fn creates_a_random_folder() {
+        // let path = ""
+        let p = create_random_tmp_folder().unwrap();
+        assert!(p.exists());
+        fs::remove_dir(p).unwrap();
     }
 }

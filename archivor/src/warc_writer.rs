@@ -17,7 +17,7 @@ use anyhow::anyhow;
 use redis::Commands;
 use sysinfo::{PidExt, System, SystemExt};
 
-use crate::utils::{get_random_string, get_tmp_screenshot_dir};
+use crate::utils::{create_random_tmp_folder, get_random_string, get_tmp_screenshot_dir};
 
 pub struct WarcWriter {
     port: u16,
@@ -305,15 +305,6 @@ fn setup_dir(archive_name: &str, parent_dir: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn create_random_tmp_folder() -> anyhow::Result<PathBuf> {
-    let rand_folder_name: String = get_random_string(11);
-
-    let path = PathBuf::from(format!("/tmp/archivoor-{}", rand_folder_name));
-    fs::create_dir(&path)?;
-    // populate this folder with a config.yaml
-    Ok(path)
-}
-
 // Wayback config necessary for the application to work as desired
 fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
     let cfg = r#"
@@ -346,15 +337,9 @@ fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use crate::utils::create_random_tmp_folder;
 
-    #[test]
-    fn creates_a_random_folder() {
-        // let path = ""
-        let p = create_random_tmp_folder().unwrap();
-        assert!(p.exists());
-        fs::remove_dir(p).unwrap();
-    }
+    use super::*;
 
     #[test]
     fn sets_up_collection() {
