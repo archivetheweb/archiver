@@ -10,6 +10,8 @@ pub const ARCHIVE_DIR: &str = "archivoor";
 pub const BASE_URL: &str = "http://localhost";
 pub const WARC_APPLICATION_TYPE: &str = "application/warc";
 
+pub const CONTRACT_ADDRESS: &str = "-27RfG2DJAI3ddQlrXkN1rmS5fBSC4eG8Zfhz8skYTU";
+
 pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<String>> {
     return Box::new(move |url| normalize_url(&base_url, url));
 }

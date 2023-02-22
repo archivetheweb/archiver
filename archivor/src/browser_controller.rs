@@ -45,7 +45,7 @@ impl BrowserController {
 
     // TODO make this async so we can move around threads
     pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
-        let tab = self.browser.wait_for_initial_tab()?;
+        let tab = self.browser.new_tab()?;
 
         let nv = match tab.navigate_to(&url) {
             Ok(t) => t,

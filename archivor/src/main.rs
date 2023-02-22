@@ -15,7 +15,7 @@ use archivoor_v1::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
     types::{BundlrBalance, BUNDLR_URL},
-    utils::get_unix_timestamp,
+    utils::{get_unix_timestamp, CONTRACT_ADDRESS},
 };
 use arloader::Arweave;
 use atw::state::{ArchiveOptions, ArchiveSubmission};
@@ -60,11 +60,7 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow!("no funds in bundlr address {} ", &wallet_address));
     }
 
-    let c = Contract::new(
-        "-27RfG2DJAI3ddQlrXkN1rmS5fBSC4eG8Zfhz8skYTU".into(),
-        "mainnet",
-        arweave,
-    )?;
+    let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave)?;
 
     let uploaders = c.uploaders().await?;
 
