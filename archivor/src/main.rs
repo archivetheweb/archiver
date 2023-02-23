@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
         if should_terminate.load(Ordering::Relaxed) {
             return Ok(());
         }
-        match run(&c, wallet_address.clone()).await {
+        match run(&c, wallet_address.clone(), should_terminate.clone()).await {
             Ok(_) => {}
             Err(e) => {
                 error!("Error in main loop: {}", e)
@@ -88,7 +88,11 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
+async fn run(
+    c: &Contract,
+    wallet_address: String,
+    should_terminate: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
     let requests = c.archiving_requests_for(&wallet_address).await?;
     debug!("Requests: {:#?}", requests);
 
@@ -150,10 +154,18 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
 
         let r = Runner::new(options).await?;
 
+        if should_terminate.load(Ordering::Relaxed) {
+            return Err(anyhow!("Early termination"));
+        }
+
         let url = &req.options.urls[0];
 
         let result = r.run_archiving(url).await?;
         debug!("result {:?}", result);
+
+        if should_terminate.load(Ordering::Relaxed) {
+            return Err(anyhow!("Early termination"));
+        }
 
         let main_file = result.warc_files[0].clone();
 
@@ -168,6 +180,10 @@ async fn run(c: &Contract, wallet_address: String) -> anyhow::Result<()> {
         let upload_result = r.run_upload_crawl(&result).await?;
 
         debug!("Upload result {:#?}", upload_result);
+
+        if should_terminate.load(Ordering::Relaxed) {
+            return Err(anyhow!("Early termination"));
+        }
 
         c.submit_archive(ArchiveSubmission {
             full_url: url.into(),
