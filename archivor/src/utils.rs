@@ -71,7 +71,6 @@ pub fn create_random_tmp_folder() -> anyhow::Result<PathBuf> {
 
     let path = PathBuf::from(format!("/tmp/archivoor-{}", rand_folder_name));
     fs::create_dir(&path)?;
-    // populate this folder with a config.yaml
     Ok(path)
 }
 
