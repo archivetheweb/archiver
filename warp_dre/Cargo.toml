@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 serde_derive = "1.0.152"
-reqwest = { version = "0.11.13", features = ["blocking", "json"] }
+reqwest = { version = "0.11.13", features = ["json"] }
 anyhow = "1.0.68"
 log = "0.4.0"
 env_logger = "0.9.0"
