@@ -7,7 +7,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{sync::mpsc, task, time::sleep};
+use tokio::{sync::mpsc, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
@@ -194,73 +194,60 @@ impl Crawler {
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
 
-                        let links: Result<Result<_, anyhow::Error>, _> =
-                            task::spawn_blocking(move || {
-                                // headless chrome can't handle pdfs, so we make a direct request for it
-                                if u.as_str().ends_with(".pdf") {
-                                    match reqwest::blocking::get(u.as_str()) {
-                                        Ok(res) => {
-                                            // make sure we read the text
-                                            debug!("fetching pdf at {}", u.as_str());
-                                            let _r = res.text();
-                                            return Ok((vec![], false));
-                                        }
-                                        Err(e) => {
-                                            warn!("error downloading pdf err: {}", e);
-                                            return Ok((vec![], true));
-                                        }
+                        let links = async move {
+                            // headless chrome can't handle pdfs, so we make a direct request for it
+                            if u.as_str().ends_with(".pdf") {
+                                match reqwest::blocking::get(u.as_str()) {
+                                    Ok(res) => {
+                                        // make sure we read the text
+                                        debug!("fetching pdf at {}", u.as_str());
+                                        let _r = res.text();
+                                        return (vec![], false);
                                     }
-                                }
-
-                                let browser = match BrowserController::new() {
-                                    Ok(b) => b,
-                                    Err(_) => return Ok((vec![], true)),
-                                };
-                                let tab = match browser.browse(u.as_str(), is_first_url) {
-                                    Ok(tab) => tab,
                                     Err(e) => {
-                                        warn!("error browsing for {} with err {}", u, e);
-                                        // we return an empty list of links, and flag as errored out
-                                        return Ok((vec![], true));
+                                        warn!("error downloading pdf err: {}", e);
+                                        return (vec![], true);
+                                    }
+                                }
+                            }
+
+                            let browser = match BrowserController::new().await {
+                                Ok(b) => b,
+                                Err(_) => return (vec![], true),
+                            };
+                            let tab = match browser.browse(u.as_str(), is_first_url).await {
+                                Ok(tab) => tab,
+                                Err(e) => {
+                                    warn!("error browsing for {} with err {}", u, e);
+                                    // we return an empty list of links, and flag as errored out
+                                    return (vec![], true);
+                                }
+                            };
+
+                            if is_first_url {
+                                let title = match tab.get_title() {
+                                    Ok(t) => t,
+                                    Err(e) => {
+                                        warn!("could not get title {:?}", e);
+                                        "".into()
                                     }
                                 };
-
-                                if is_first_url {
-                                    let title = tab.get_title()?;
-                                    let mut main_title = title_mutex.blocking_lock();
-                                    *main_title = title;
-                                }
-
-                                Ok((
-                                    browser
-                                        .get_links(&tab)
-                                        .iter()
-                                        .filter_map(normalize_url_map(base_url.into()))
-                                        .collect::<Vec<String>>(),
-                                    false,
-                                ))
-                            })
-                            .await;
-
-                        let links = match links {
-                            Ok(l) => l,
-                            Err(e) => {
-                                error!("problem spawning a blocking thread {}", e);
-                                ab.fetch_sub(1, Ordering::SeqCst);
-                                failed_url_tx.send((url, depth)).await.unwrap();
-                                return;
+                                let mut main_title = title_mutex.blocking_lock();
+                                *main_title = title;
                             }
-                        };
 
-                        let links = match links {
-                            Ok(l) => l,
-                            Err(e) => {
-                                error!("problem unwrapping links {}", e);
-                                ab.fetch_sub(1, Ordering::SeqCst);
-                                failed_url_tx.send((url, depth)).await.unwrap();
-                                return;
-                            }
-                        };
+                            (
+                                browser
+                                    .get_links(&tab)
+                                    .await
+                                    .iter()
+                                    .filter_map(normalize_url_map(base_url.into()))
+                                    .collect::<Vec<String>>(),
+                                false,
+                            )
+                        }
+                        .await;
+
                         // the boolean in the second element of the tuple
                         // tells us whether there was an error or not
                         // if so, we send the url to the failed url channel

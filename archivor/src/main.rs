@@ -6,7 +6,6 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread::sleep,
     time::Duration,
 };
 
@@ -24,6 +23,7 @@ use cron::Schedule;
 use log::{debug, error};
 use reqwest::Url;
 use signal_hook::consts::{SIGINT, SIGTERM};
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -84,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
         }
         let timeout = 30;
         debug!("sleeping for {} seconds", timeout);
-        sleep(Duration::from_secs(timeout));
+        sleep(Duration::from_secs(timeout)).await;
     }
 }
 

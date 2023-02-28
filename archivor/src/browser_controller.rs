@@ -5,8 +5,9 @@ use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
 use rand::Rng;
 use std::fs;
 use std::sync::Arc;
-use std::{thread::sleep, time::Duration};
+use std::time::Duration;
 use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
+use tokio::time::sleep;
 
 use crate::utils::{extract_collection_name, get_tmp_screenshot_dir};
 
@@ -22,7 +23,7 @@ const SCROLL_JS: &str = r#" new Promise((resolve) => {
             clearInterval(timer);
             resolve("ok");
         }
-    }, 50);
+    }, 60);
 
 });"#;
 
@@ -31,7 +32,7 @@ pub struct BrowserController {
 }
 
 impl BrowserController {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let options = LaunchOptions::default_builder()
             .path(Some(default_executable().unwrap()))
             .window_size(Some((1920, 1080)))
@@ -43,8 +44,7 @@ impl BrowserController {
         Ok(BrowserController { browser })
     }
 
-    // TODO make this async so we can move around threads
-    pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
+    pub async fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
         let tab = self.browser.new_tab()?;
 
         let nv = match tab.navigate_to(&url) {
@@ -60,17 +60,18 @@ impl BrowserController {
             nv.wait_until_navigated()?;
         }
 
-        tab.bring_to_front()?;
-
         // to do, have a better wait function
         if let Err(_) = tab.wait_for_element("a") {
             warn!("Waiting for a element for url {} is retrying", url);
             tab.wait_for_element("a")?;
         };
-        let mut rng = rand::thread_rng();
-        let rndm = rng.gen_range(3..6);
+
+        let rndm = {
+            let mut rng = rand::thread_rng();
+            rng.gen_range(5..7)
+        };
         debug!("sleeping for {} seconds", rndm);
-        sleep(Duration::from_secs(rndm));
+        sleep(Duration::from_secs(rndm)).await;
 
         if screenshot {
             let collection_name = extract_collection_name(&url);
@@ -95,12 +96,12 @@ impl BrowserController {
         };
 
         debug!("sleeping for {} seconds", rndm);
-        sleep(Duration::from_secs(rndm));
+        sleep(Duration::from_secs(rndm)).await;
 
         Ok(tab)
     }
 
-    pub fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
+    pub async fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
         let rs = match tab.find_elements("a") {
             Ok(elems) => elems,
             Err(e) => {
