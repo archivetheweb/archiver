@@ -270,7 +270,6 @@ impl Archiver {
                 None => continue,
             };
 
-            debug!("running for request {:?} ", req);
             archiver_tx.send(req).await?;
         }
         Ok(())
