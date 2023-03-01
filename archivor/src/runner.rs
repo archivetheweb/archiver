@@ -109,7 +109,7 @@ impl Runner {
         let crawl = self.run_archiving(url).await?;
 
         if !self.should_terminate.load(Ordering::Relaxed) {
-            self.run_upload_crawl(&crawl).await?;
+            self.run_upload_crawl(crawl).await?;
         }
 
         Ok(())
@@ -175,7 +175,7 @@ impl Runner {
 
     pub async fn run_upload_crawl(
         &self,
-        crawl: &ArchivingResult,
+        crawl: ArchivingResult,
     ) -> anyhow::Result<CrawlUploadResult> {
         if !self.options.with_upload {
             return Err(anyhow!("no upload option turned on"));
@@ -183,7 +183,7 @@ impl Runner {
 
         match &self.uploader {
             Some(u) => {
-                let ids = u.upload_crawl_files(crawl).await?;
+                let ids = u.upload_crawl_files(&crawl).await?;
 
                 return Ok(ids);
             }

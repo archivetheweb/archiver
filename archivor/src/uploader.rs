@@ -5,11 +5,11 @@ use arloader::{
 use futures::StreamExt;
 use itertools::Itertools;
 use std::{
-    fs::{self},
     path::PathBuf,
     str::FromStr,
     time::{Duration, SystemTime},
 };
+use tokio::fs;
 use tokio_retry::{strategy::FixedInterval, Retry};
 
 use anyhow::anyhow;
@@ -21,7 +21,7 @@ use crate::{
     types::{
         ArchiveInfo, ArchivingResult, CrawlUploadResult, BUNDLR_URL, DRIVE_ID, PARENT_FOLDER_ID,
     },
-    utils::{get_unix_timestamp, jitter, WARC_APPLICATION_TYPE},
+    utils::{assert_stream_send, get_unix_timestamp, jitter, WARC_APPLICATION_TYPE},
 };
 
 pub struct Uploader {
@@ -96,36 +96,6 @@ impl Uploader {
         })
     }
 
-    pub fn fetch_latest_warc(&self, directory: &PathBuf) -> anyhow::Result<PathBuf> {
-        let dir = fs::read_dir(directory)?;
-        let Some(latest) = dir.into_iter().filter_map(|x| {
-            match x {
-                Ok(x) => {
-                    if x.file_name().to_str().unwrap().contains("<unprocessed>") {
-                        return None
-                    }
-                    Some(x)
-                }
-                Err(e)=>{
-                    error!("could not filter map for fetch_latest_warc {}", e);
-                    None
-                }
-            }
-        }).max_by_key(|x| {
-            let file = x.file_name();
-
-            let elems: Vec<&str> = file.to_str().unwrap().trim().split("_").collect();
-
-            match elems[1].parse::<u128>() {
-                Ok(ts) => ts,
-                Err(_) => 0
-            }
-        }) else {
-            return Err(anyhow!("problem reading the directory {:?}", directory));
-        };
-        Ok(latest.path())
-    }
-
     pub async fn upload_crawl_files(
         &self,
         crawl: &ArchivingResult,
@@ -160,7 +130,7 @@ impl Uploader {
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
     ) -> anyhow::Result<(String, String)> {
-        let data = fs::read(file_path)?;
+        let data = fs::read(file_path).await?;
         let name = match file_path.file_name() {
             Some(n) => n.to_str().unwrap(),
             None => return Err(anyhow!("invalid file path {:?}", file_path)),
@@ -207,7 +177,7 @@ impl Uploader {
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
     ) -> anyhow::Result<(String, String)> {
-        let screenshot_data = fs::read(file_path)?;
+        let screenshot_data = fs::read(file_path).await?;
         let screenshot_name = match file_path.file_name() {
             Some(n) => n.to_str().unwrap(),
             None => return Err(anyhow!("screenshot: invalid file path {:?}", file_path)),
@@ -310,25 +280,27 @@ impl Uploader {
                 .map(|x| x.collect::<Vec<u8>>())
                 .collect::<Vec<Vec<u8>>>();
 
-            let mut stream = tokio_stream::iter(data.iter().enumerate())
-                .map(|p| {
-                    let retry_strategy = FixedInterval::from_millis(20)
-                        .map(jitter) // add jitter to delays
-                        .take(5);
-                    let index = p.0;
-                    let uid = upload_id.clone();
-                    let client = client.clone();
-                    Retry::spawn(retry_strategy, move || {
-                        client
-                            .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, index))
-                            .header("Content-Type", "application/octet-stream")
-                            .header("x-chunking-version", "2")
-                            .timeout(Duration::from_secs(20))
-                            .body(p.1.clone())
-                            .send()
+            let mut stream = assert_stream_send(
+                tokio_stream::iter(data.iter().enumerate())
+                    .map(|p| {
+                        let retry_strategy = FixedInterval::from_millis(20)
+                            .map(jitter) // add jitter to delays
+                            .take(5);
+                        let index = p.0;
+                        let uid = upload_id.clone();
+                        let client = client.clone();
+                        Retry::spawn(retry_strategy, move || {
+                            client
+                                .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, index))
+                                .header("Content-Type", "application/octet-stream")
+                                .header("x-chunking-version", "2")
+                                .timeout(Duration::from_secs(20))
+                                .body(p.1.clone())
+                                .send()
+                        })
                     })
-                })
-                .buffer_unordered(10);
+                    .buffer_unordered(10),
+            );
 
             let mut counter = 0;
             while let Some(result) = stream.next().await {
@@ -433,7 +405,7 @@ mod test {
         ))
         .unwrap();
 
-        let d = fs::read("res/5MB.zip").unwrap();
+        let d = tokio_test::block_on(fs::read("res/5MB.zip")).unwrap();
 
         let r = tokio_test::block_on(u.upload_to_bundlr(d, vec![])).unwrap();
 

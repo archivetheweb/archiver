@@ -1,3 +1,4 @@
+use futures::Stream;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use reqwest::Url;
 use std::{
@@ -34,6 +35,12 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
             }
         }
     }
+}
+
+pub fn assert_stream_send<'u, R>(
+    strm: impl 'u + Send + Stream<Item = R>,
+) -> impl 'u + Send + Stream<Item = R> {
+    strm
 }
 
 pub fn jitter(duration: Duration) -> Duration {

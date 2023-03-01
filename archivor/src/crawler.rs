@@ -232,7 +232,7 @@ impl Crawler {
                                         "".into()
                                     }
                                 };
-                                let mut main_title = title_mutex.blocking_lock();
+                                let mut main_title = title_mutex.lock().await;
                                 *main_title = title;
                             }
 
