@@ -5,8 +5,8 @@ services:
     depends_on:
       - redis
     command: tail -f /dev/null
-
+    network_mode: host
+    extra_hosts:
+        - "host.docker.internal:host-gateway"
   redis:
     image: redis
-    ports:
-      - 6379:6379
