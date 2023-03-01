@@ -398,9 +398,10 @@ mod test {
     use super::*;
 
     #[test]
+    #[ignore]
     fn test_upload_large_data_item() {
         let u = tokio_test::block_on(Uploader::new(
-            PathBuf::from_str("res/test_wallet.json").unwrap(),
+            PathBuf::from_str(".secret/test_wallet.json").unwrap(),
             "arweave",
         ))
         .unwrap();

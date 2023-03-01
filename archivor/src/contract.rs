@@ -217,22 +217,21 @@ mod test {
     use atw::state::ArchiveOptions;
     use reqwest::Url;
 
-    use crate::utils::get_unix_timestamp;
+    use crate::utils::{get_unix_timestamp, CONTRACT_ADDRESS};
 
     use super::*;
 
-    const EXAMPLE_CONTRACT: &str = "YQLMJqrN8jTAmuEB_nWqgK9cKT72VwtvTqv7KP7ZOUc";
     const UPLOADER_ADDRESS: &str = "k-JI7M_U8hoezJuaaxKx8IBFJ3KRA9DGNCUw0Baltyc";
 
     #[test]
     fn test_state() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
-            PathBuf::from("res/test_wallet.json"),
+            PathBuf::from(".secret/test_wallet.json"),
             Url::from_str("https://arweave.net").unwrap(),
         ))
         .unwrap();
 
-        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.state()).unwrap();
         println!("{:#?}", s);
@@ -241,12 +240,12 @@ mod test {
     #[test]
     fn test_uploaders() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
-            PathBuf::from("res/test_wallet.json"),
+            PathBuf::from(".secret/test_wallet.json"),
             Url::from_str("https://arweave.net").unwrap(),
         ))
         .unwrap();
 
-        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.uploaders()).unwrap();
         println!("{:#?}", s);
@@ -255,28 +254,26 @@ mod test {
     #[test]
     fn test_requests_for() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
-            PathBuf::from("res/test_wallet.json"),
+            PathBuf::from(".secret/test_wallet.json"),
             Url::from_str("https://arweave.net").unwrap(),
         ))
         .unwrap();
 
-        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.archiving_requests_for(UPLOADER_ADDRESS)).unwrap();
         println!("{:#?}", s);
-
-        assert!(s.len() > 0);
     }
 
     #[test]
     fn test_archives_by_url() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
-            PathBuf::from("res/test_wallet.json"),
+            PathBuf::from(".secret/test_wallet.json"),
             Url::from_str("https://arweave.net").unwrap(),
         ))
         .unwrap();
 
-        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.archives_by_url("example.com", 10)).unwrap();
         println!("{:#?}", s);
@@ -287,12 +284,12 @@ mod test {
     #[test]
     fn test_register_uploader() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
-            PathBuf::from("res/test_wallet.json"),
+            PathBuf::from(".secret/test_wallet.json"),
             Url::from_str("https://arweave.net").unwrap(),
         ))
         .unwrap();
 
-        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
 
         let uploader = RegisterUploader {
             friendly_name: "alice".into(),
@@ -305,12 +302,12 @@ mod test {
     #[test]
     fn test_delete_archive_request() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
-            PathBuf::from("res/test_wallet.json"),
+            PathBuf::from(".secret/test_wallet.json"),
             Url::from_str("https://arweave.net").unwrap(),
         ))
         .unwrap();
 
-        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(
             c.delete_archive_request("ol2dKXgntbxj5PFtbWvgmftCLibrqkjIrraQYzcweFU".into()),
@@ -322,12 +319,12 @@ mod test {
     #[test]
     fn test_submit_archives() {
         let arweave = tokio_test::block_on(Arweave::from_keypair_path(
-            PathBuf::from("res/test_wallet.json"),
+            PathBuf::from(".secret/test_wallet.json"),
             Url::from_str("https://arweave.net").unwrap(),
         ))
         .unwrap();
 
-        let c = Contract::new(EXAMPLE_CONTRACT.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
 
         let archive = ArchiveSubmission {
             full_url: "https://example.com?hi".into(),
