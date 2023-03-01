@@ -18,7 +18,7 @@ lazy_static! {
             Err(_) => "".into(),
         };
         if env == "production" {
-            return "".into();
+            return "dD1DuvgM_Vigtnv4vl2H1IYn9CgLvYuhbEWPOL-_4Mw".into();
         }
         "-27RfG2DJAI3ddQlrXkN1rmS5fBSC4eG8Zfhz8skYTU".into()
     };
