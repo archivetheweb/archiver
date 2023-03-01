@@ -231,7 +231,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.state()).unwrap();
         println!("{:#?}", s);
@@ -245,7 +245,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.uploaders()).unwrap();
         println!("{:#?}", s);
@@ -259,7 +259,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.archiving_requests_for(UPLOADER_ADDRESS)).unwrap();
         println!("{:#?}", s);
@@ -273,7 +273,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(c.archives_by_url("example.com", 10)).unwrap();
         println!("{:#?}", s);
@@ -289,7 +289,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave).unwrap();
 
         let uploader = RegisterUploader {
             friendly_name: "alice".into(),
@@ -307,7 +307,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave).unwrap();
 
         let s = tokio_test::block_on(
             c.delete_archive_request("ol2dKXgntbxj5PFtbWvgmftCLibrqkjIrraQYzcweFU".into()),
@@ -324,7 +324,7 @@ mod test {
         ))
         .unwrap();
 
-        let c = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave).unwrap();
+        let c = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave).unwrap();
 
         let archive = ArchiveSubmission {
             full_url: "https://example.com?hi".into(),

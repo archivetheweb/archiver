@@ -11,7 +11,39 @@ pub const ARCHIVE_DIR: &str = "archivoor";
 pub const BASE_URL: &str = "http://localhost";
 pub const WARC_APPLICATION_TYPE: &str = "application/warc";
 
-pub const CONTRACT_ADDRESS: &str = "-27RfG2DJAI3ddQlrXkN1rmS5fBSC4eG8Zfhz8skYTU";
+lazy_static! {
+    pub static ref CONTRACT_ADDRESS: String = {
+        let env = match std::env::var("ENVIRONMENT") {
+            Ok(e) => e,
+            Err(_) => "".into(),
+        };
+        if env == "production" {
+            return "".into();
+        }
+        "-27RfG2DJAI3ddQlrXkN1rmS5fBSC4eG8Zfhz8skYTU".into()
+    };
+    pub static ref APP_NAME: String = {
+        let env = match std::env::var("ENVIRONMENT") {
+            Ok(e) => e,
+            Err(_) => "".into(),
+        };
+        if env == "production" {
+            return "archivetheweb".into();
+        }
+        "atw".into()
+    };
+    pub static ref APP_VERSION: String = {
+        let env = match std::env::var("ENVIRONMENT") {
+            Ok(e) => e,
+            Err(_) => "".into(),
+        };
+        let v = "0.0.1";
+        if env == "production" {
+            return v.into();
+        }
+        format!("{}_dev", v)
+    };
+}
 
 pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<String>> {
     return Box::new(move |url| normalize_url(&base_url, url));

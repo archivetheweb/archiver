@@ -62,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow!("no funds in bundlr address {} ", &wallet_address));
     }
 
-    let contract = Contract::new(CONTRACT_ADDRESS.into(), "mainnet", arweave)?;
+    let contract = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave)?;
 
     let uploaders = contract.uploaders().await?;
 

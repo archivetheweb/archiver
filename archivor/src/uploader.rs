@@ -21,7 +21,10 @@ use crate::{
     types::{
         ArchiveInfo, ArchivingResult, CrawlUploadResult, BUNDLR_URL, DRIVE_ID, PARENT_FOLDER_ID,
     },
-    utils::{assert_stream_send, get_unix_timestamp, jitter, WARC_APPLICATION_TYPE},
+    utils::{
+        assert_stream_send, get_unix_timestamp, jitter, APP_NAME, APP_VERSION,
+        WARC_APPLICATION_TYPE,
+    },
 };
 
 pub struct Uploader {
@@ -360,8 +363,8 @@ fn append_app_tags(
 ) -> Vec<Tag<String>> {
     let mut t = vec![
         // App Tags
-        Tag::<String>::from_utf8_strs("App-Name", "atw").unwrap(),
-        Tag::<String>::from_utf8_strs("App-Version", "0.0.1_beta").unwrap(),
+        Tag::<String>::from_utf8_strs("App-Name", &APP_NAME).unwrap(),
+        Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
         Tag::<String>::from_utf8_strs("Url", url.into()).unwrap(),
         Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
         Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
@@ -374,7 +377,7 @@ fn create_arfs_file_metadata_tags() -> Vec<Tag<String>> {
     vec![
         // Ardrive FS tags
         Tag::<String>::from_utf8_strs("ArFS", "0.11").unwrap(),
-        Tag::<String>::from_utf8_strs("App-Version", "0.0.1_beta").unwrap(),
+        Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
         Tag::<String>::from_utf8_strs("Content-Type", "application/json").unwrap(),
         Tag::<String>::from_utf8_strs("Drive-Id", DRIVE_ID).unwrap(),
         Tag::<String>::from_utf8_strs("Entity-Type", "file").unwrap(),

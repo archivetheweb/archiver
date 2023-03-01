@@ -2,6 +2,8 @@
 extern crate log;
 #[macro_use]
 extern crate derive_builder;
+#[macro_use]
+extern crate lazy_static;
 
 pub mod browser_controller;
 pub mod contract;
