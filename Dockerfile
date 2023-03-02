@@ -23,8 +23,6 @@ COPY ./warp-contracts-rust/awt/contract/implementation/Cargo.toml ./warp-contrac
 
 COPY ./warp_dre ./warp_dre 
 
-ENV IN_DOCKER=true
-
 RUN cargo build --release
 
 
@@ -45,18 +43,9 @@ RUN rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/archivoor-v1 ./
 COPY --from=builder /app/archivor/.secret/test_wallet.json ./.secret/
 
-ENV USER=app
-ENV UID=10001
-
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --uid "${UID}" \
-    "${USER}"
-
-
-
 ENV RUST_LOG=debug
+
+ENV IN_DOCKER=true
 
 ENTRYPOINT ["./archivoor-v1"]
 # ENTRYPOINT ["tail", "-f", "/dev/null"]

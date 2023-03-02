@@ -39,7 +39,7 @@ impl BrowserController {
             .window_size(Some((1920, 1080)))
             .idle_browser_timeout(Duration::from_secs(45))
             // warning only do this if in docker env
-            .sandbox(is_docker)
+            .sandbox(!is_docker)
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
         let browser = Browser::new(options).context("browser error")?;
