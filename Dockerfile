@@ -1,25 +1,4 @@
-FROM ubuntu:22.04
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install wget curl build-essential pkg-config libssl-dev python3.6 python3-pip -y 
-RUN pip3 install pywb
-RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-RUN apt install ./google-chrome-stable_current_amd64.deb -y
-RUN rm ./google-chrome-stable_current_amd64.deb
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y 
-
-
-ENV USER=app
-ENV UID=10001
-
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    "${USER}"
-
+FROM rust:1.67 as builder
 
 RUN mkdir app
 WORKDIR /app
@@ -30,29 +9,55 @@ COPY ./archivor/config.yaml ./archivor/config.yaml
 COPY ./archivor/.secret ./archivor/.secret
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
-COPY ./warp-contracts-rust ./warp-contracts-rust 
+
+COPY ./warp-contracts-rust/shared ./warp-contracts-rust/shared 
+
+COPY ./warp-contracts-rust/awt/Cargo.lock ./warp-contracts-rust/awt/Cargo.lock 
+COPY ./warp-contracts-rust/awt/Cargo.toml ./warp-contracts-rust/awt/Cargo.toml 
+
+COPY ./warp-contracts-rust/awt/contract/definition/src ./warp-contracts-rust/awt/contract/definition/src 
+COPY ./warp-contracts-rust/awt/contract/definition/Cargo.toml ./warp-contracts-rust/awt/contract/definition/Cargo.toml 
+
+COPY ./warp-contracts-rust/awt/contract/implementation/src ./warp-contracts-rust/awt/contract/implementation/src 
+COPY ./warp-contracts-rust/awt/contract/implementation/Cargo.toml ./warp-contracts-rust/awt/contract/implementation/Cargo.toml 
+
 COPY ./warp_dre ./warp_dre 
 
-RUN /root/.cargo/bin/cargo build --release
+ENV IN_DOCKER=true
 
-USER app:app
-
-# FROM scratch
-
-# # Import from builder.
-# COPY --from=builder /etc/passwd /etc/passwd
-# COPY --from=builder /etc/group /etc/group
-
-# WORKDIR /app
-
-# # Copy our build
-# COPY --from=builder /app/target/release/archivoor-v1 ./
-
-# # Use an unprivileged user.
-# USER app:app
-
-# CMD ["/app/archivoor-v1"]
+RUN cargo build --release
 
 
+FROM ubuntu:22.04
 
-ENTRYPOINT ["tail", "-f", "/dev/null"]
+RUN echo "deb http://security.ubuntu.com/ubuntu focal-security main" | tee /etc/apt/sources.list.d/focal-security.list
+RUN apt-get update && apt-get install wget curl build-essential pkg-config libssl-dev python3.6 python3-pip libssl1.1 -y 
+RUN dpkg -L libssl1.1
+RUN pip3 install pywb
+RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \ 
+    apt install ./google-chrome-stable_current_amd64.deb -y && \
+    rm ./google-chrome-stable_current_amd64.deb
+
+RUN rm -rf /var/lib/apt/lists/*
+
+# COPY  ./target/debug/archivoor-v1 ./
+# COPY  ./archivor/.secret/test_wallet.json ./.secret/
+COPY --from=builder /app/target/release/archivoor-v1 ./
+COPY --from=builder /app/archivor/.secret/test_wallet.json ./.secret/
+
+ENV USER=app
+ENV UID=10001
+
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --uid "${UID}" \
+    "${USER}"
+
+
+
+ENV RUST_LOG=debug
+
+ENTRYPOINT ["./archivoor-v1"]
+# ENTRYPOINT ["tail", "-f", "/dev/null"]
+
