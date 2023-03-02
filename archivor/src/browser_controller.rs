@@ -33,10 +33,13 @@ pub struct BrowserController {
 
 impl BrowserController {
     pub async fn new() -> Result<Self> {
+        let is_docker = std::env::var("IN_DOCKER").is_ok();
         let options = LaunchOptions::default_builder()
             .path(Some(default_executable().unwrap()))
             .window_size(Some((1920, 1080)))
             .idle_browser_timeout(Duration::from_secs(45))
+            // warning only do this if in docker env
+            .sandbox(is_docker)
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
         let browser = Browser::new(options).context("browser error")?;

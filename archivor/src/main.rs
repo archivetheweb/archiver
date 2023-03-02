@@ -283,7 +283,7 @@ impl Archiver {
     ) -> anyhow::Result<()> {
         let options = LaunchOptions::default_builder()
             .with_upload(true)
-            .writer_dir(Some(".".into()))
+            .writer_dir(Some("/tmp/".into()))
             .writer_port(None)
             .writer_debug(false)
             .archive_name(None)
