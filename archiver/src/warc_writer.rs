@@ -13,7 +13,7 @@ use std::{
 
 use urlencoding::encode;
 extern crate redis;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use redis::Commands;
 use sysinfo::{PidExt, System, SystemExt};
 
@@ -84,7 +84,8 @@ impl WarcWriter {
             .args(args)
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .context("could not spawn wayback process")?;
 
         let stderr = process.stderr.take().unwrap();
 
@@ -154,7 +155,8 @@ impl WarcWriter {
     }
 
     fn fetch_all_warcs(&self) -> anyhow::Result<Vec<DirEntry>> {
-        let dir = fs::read_dir(self.archive_dir())?;
+        let dir = fs::read_dir(self.archive_dir())
+            .context(format!("could not read_dir {:?}", self.archive_dir()))?;
 
         let dir: Vec<DirEntry> = dir
             .into_iter()
@@ -217,7 +219,7 @@ impl WarcWriter {
         Ok(filenames)
     }
 
-    pub fn organize_screenshot(
+    pub fn process_screenshot(
         &self,
         ts: &str,
         domain: &str,
@@ -228,7 +230,10 @@ impl WarcWriter {
         dir.push("screenshots");
         dir.push(format!("archiver_{}_{}_{}.png", ts, encode(domain), depth));
         let screenshot_dir = get_tmp_screenshot_dir(&self.archive_name);
-        fs::copy(&screenshot_dir, &dir)?;
+        fs::copy(&screenshot_dir, &dir).context(format!(
+            "could not copy screenshot from {:?} to {:?}",
+            &screenshot_dir, &dir
+        ))?;
         fs::remove_file(screenshot_dir)?;
         Ok(dir)
     }
@@ -292,7 +297,8 @@ fn setup_dir(archive_name: &str, parent_dir: &PathBuf) -> anyhow::Result<()> {
         let res = Command::new("wb-manager")
             .current_dir(parent_dir)
             .args(["init", archive_name])
-            .status()?;
+            .status()
+            .context("could not setup dir using wb-manager")?;
 
         if !res.success() {
             process::exit(res.code().unwrap());
@@ -300,7 +306,7 @@ fn setup_dir(archive_name: &str, parent_dir: &PathBuf) -> anyhow::Result<()> {
         let mut new_dir = dir.clone();
         new_dir.push("screenshots");
 
-        fs::create_dir(new_dir)?;
+        fs::create_dir(&new_dir).context(format!("could not create dir {:?}", new_dir))?;
     }
     Ok(())
 }
@@ -330,7 +336,7 @@ fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    fs::write(p, cfg)?;
+    fs::write(p, cfg).context(format!("could not create config.yaml"))?;
 
     Ok(())
 }
