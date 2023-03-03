@@ -18,12 +18,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    types::{
-        ArchiveInfo, ArchivingResult, CrawlUploadResult, BUNDLR_URL, DRIVE_ID, PARENT_FOLDER_ID,
-    },
+    types::{ArchiveInfo, ArchivingResult, CrawlUploadResult},
     utils::{
-        assert_stream_send, get_unix_timestamp, jitter, APP_NAME, APP_VERSION,
-        WARC_APPLICATION_TYPE,
+        assert_stream_send, get_unix_timestamp, jitter, APP_NAME, APP_VERSION, BUNDLR_URL,
+        DRIVE_ID, PARENT_FOLDER_ID, WARC_APPLICATION_TYPE,
     },
 };
 
@@ -379,10 +377,10 @@ fn create_arfs_file_metadata_tags() -> Vec<Tag<String>> {
         Tag::<String>::from_utf8_strs("ArFS", "0.11").unwrap(),
         Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
         Tag::<String>::from_utf8_strs("Content-Type", "application/json").unwrap(),
-        Tag::<String>::from_utf8_strs("Drive-Id", DRIVE_ID).unwrap(),
+        Tag::<String>::from_utf8_strs("Drive-Id", &DRIVE_ID).unwrap(),
         Tag::<String>::from_utf8_strs("Entity-Type", "file").unwrap(),
         Tag::<String>::from_utf8_strs("File-Id", &Uuid::new_v4().to_string()).unwrap(),
-        Tag::<String>::from_utf8_strs("Parent-Folder-Id", PARENT_FOLDER_ID).unwrap(),
+        Tag::<String>::from_utf8_strs("Parent-Folder-Id", &PARENT_FOLDER_ID).unwrap(),
         Tag::<String>::from_utf8_strs("Unix-Time", &get_unix_timestamp().as_secs().to_string())
             .unwrap(),
     ]

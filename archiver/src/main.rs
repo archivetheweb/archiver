@@ -11,11 +11,11 @@ use std::{
 };
 
 use anyhow::anyhow;
-use archiver_v1::{
+use archiver::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
-    types::{BundlrBalance, BUNDLR_URL},
-    utils::{get_unix_timestamp, CONTRACT_ADDRESS},
+    types::BundlrBalance,
+    utils::{get_unix_timestamp, BUNDLR_URL, CONTRACT_ADDRESS},
 };
 use arloader::Arweave;
 use atw::state::{ArchiveOptions, ArchiveRequest, ArchiveSubmission};
