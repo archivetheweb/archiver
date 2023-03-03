@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use archiver::{
     archiver::Archiver,
     contract::Contract,
@@ -24,12 +24,11 @@ async fn main() -> anyhow::Result<()> {
     let should_terminate = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
     signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
-
-    let arweave = Arweave::from_keypair_path(
-        PathBuf::from(".secret/wallet.json"),
-        Url::from_str("https://arweave.net")?,
-    )
-    .await?;
+    let path = PathBuf::from(".secret/wallet.json");
+    let p = path.clone();
+    let arweave = Arweave::from_keypair_path(path, Url::from_str("https://arweave.net")?)
+        .await
+        .context(format!("could not open arweave wallet from path {:?}", p))?;
 
     let wallet_address = arweave.crypto.wallet_address()?.to_string();
 
@@ -50,10 +49,17 @@ async fn main() -> anyhow::Result<()> {
     if res.balance == "0" {
         return Err(anyhow!("no funds in bundlr address {} ", &wallet_address));
     }
+    let environment = "mainnet";
+    let contract = Contract::new(&CONTRACT_ADDRESS, environment, arweave).context(format!(
+        "could not initiate contract with address {} on env {}",
+        CONTRACT_ADDRESS.as_str(),
+        environment
+    ))?;
 
-    let contract = Contract::new(&CONTRACT_ADDRESS, "mainnet", arweave)?;
-
-    let uploaders = contract.uploaders().await?;
+    let uploaders = contract
+        .uploaders()
+        .await
+        .context("could not fetch uploaders")?;
 
     // we ensure we are an uploader
     if !uploaders.contains_key(&wallet_address) {
