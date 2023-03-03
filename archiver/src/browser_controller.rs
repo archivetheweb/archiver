@@ -71,11 +71,6 @@ impl BrowserController {
             warn!("error waiting for navigation, retrying {}", e);
             nv.wait_until_navigated()?;
         }
-        // to do, have a better wait function
-        if let Err(_) = tab.wait_for_element("a") {
-            warn!("Waiting for a element for url {} is retrying", url);
-            tab.wait_for_element("a")?;
-        };
 
         let rndm = {
             let mut rng = rand::thread_rng();
