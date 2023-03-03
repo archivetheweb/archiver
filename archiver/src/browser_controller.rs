@@ -48,7 +48,9 @@ impl BrowserController {
     }
 
     pub async fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
-        let tab = self.browser.new_tab()?;
+        // we create a new incognito window (no context)
+        let ctx = self.browser.new_context()?;
+        let tab = ctx.new_tab()?;
 
         let nv = match tab.navigate_to(&url) {
             Ok(t) => t,
