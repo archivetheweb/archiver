@@ -7,7 +7,7 @@ use std::{
     },
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use reqwest::Url;
 use signal_hook::consts::{SIGINT, SIGTERM};
 
@@ -87,7 +87,9 @@ impl Runner {
         )?;
 
         let uploader = if lo.with_upload {
-            let u = Uploader::new(lo.arweave_key_dir.clone(), &lo.currency).await?;
+            let u = Uploader::new(lo.arweave_key_dir.clone(), &lo.currency)
+                .await
+                .context("could not instantiate uploader")?;
             Some(u)
         } else {
             None
@@ -116,7 +118,7 @@ impl Runner {
     }
 
     fn prepare_urls(&self, url: &str) -> anyhow::Result<(String, String, String)> {
-        let u = Url::from_str(url)?;
+        let u = Url::from_str(url).context(format!("url passed is invalid {}", url))?;
         let domain = match u.domain() {
             Some(d) => d,
             None => return Err(anyhow!("url must have a valid domain")),
@@ -159,7 +161,7 @@ impl Runner {
 
         let archive_info = ArchiveInfo::new(&files[0])?;
 
-        let screenshot_dir = self.warc_writer.organize_screenshot(
+        let screenshot_dir = self.warc_writer.process_screenshot(
             &archive_info.string_ts(),
             &domain,
             self.options.crawl_depth,
