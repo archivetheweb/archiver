@@ -55,7 +55,7 @@ impl Crawler {
         // first element being the url visited, next element being all the new urls and last being the depth of the visited_url
         let (scraped_urls_tx, mut scraped_urls_rx) =
             mpsc::channel::<(String, Vec<String>, i32)>(self.concurrent_browsers as usize + 10);
-        // TODO the 1000 is only temporary
+
         let (visit_url_tx, visit_url_rx) = mpsc::channel::<(String, i32)>(1000);
         let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(String, i32)>(1000);
 
@@ -86,7 +86,12 @@ impl Crawler {
                 for new_url in new_urls.iter() {
                     if !self.visited.contains(new_url) && depth < self.depth {
                         debug!("Adding {} to the queue", &new_url);
-                        let _ = visit_url_tx.send((new_url.to_string(), depth + 1)).await;
+                        match visit_url_tx.send((new_url.to_string(), depth + 1)).await {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!("could not send new_url:{} to visit_url_tx {}", new_url, e)
+                            }
+                        };
                     }
                 }
             } else {
@@ -107,14 +112,27 @@ impl Crawler {
                                     url, depth, count
                                 );
                                 // we resend the url to be fetched
-                                visit_url_tx.send((url, depth)).await.unwrap();
+                                match visit_url_tx.send((url.clone(), depth)).await {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(
+                                            "could not send url {} to visit_url_tx for retry {} {}",
+                                            url, count, e
+                                        )
+                                    }
+                                };
                                 *count = *count + 1;
                             }
                             None => {
                                 warn!("Retrying url {} at d={}, retried {} so far", url, depth, 0);
                                 self.failed.insert(url.to_string(), 0);
                                 // this could be blocking if not in it's own thread or not enough buffer
-                                visit_url_tx.send((url, depth)).await.unwrap();
+                                match visit_url_tx.send((url.clone(), depth)).await {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!("could not send url {} to visit_url_tx for first try {}", url, e)
+                                    }
+                                };
                             }
                             _ => {
                                 error!("url {} could not be retrieved", url);
