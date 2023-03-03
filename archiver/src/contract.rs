@@ -147,9 +147,9 @@ impl Contract {
 
     pub async fn submit_archive(
         &self,
-        archive: ArchiveSubmission,
+        archive: &ArchiveSubmission,
     ) -> anyhow::Result<InteractionResponse> {
-        let mut v = serde_json::to_value(archive)?;
+        let mut v = serde_json::to_value(&archive)?;
         let t = v.as_object_mut().unwrap();
         t.insert(
             FUNCTION.into(),
@@ -341,7 +341,7 @@ mod test {
             title: "".into(),
         };
 
-        let s = tokio_test::block_on(c.submit_archive(archive)).unwrap();
+        let s = tokio_test::block_on(c.submit_archive(&archive)).unwrap();
         println!("{:#?}", s);
     }
 }

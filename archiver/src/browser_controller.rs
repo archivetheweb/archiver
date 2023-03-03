@@ -11,21 +11,25 @@ use tokio::time::sleep;
 
 use crate::utils::{extract_collection_name, get_tmp_screenshot_dir};
 
-const SCROLL_JS: &str = r#" new Promise((resolve) => {
-    var totalHeight = 0;
-    var distance = 100;
-    var timer = setInterval(() => {
-        var scrollHeight = document.body.scrollHeight;
-        window.scrollBy(0, distance);
-        totalHeight += distance;
-
-        if(totalHeight >= scrollHeight - window.innerHeight){
-            clearInterval(timer);
-            resolve("ok");
-        }
-    }, 60);
-
-});"#;
+fn get_scroll_script(timeout_ms: i128) -> String {
+    format!(
+        r#" new Promise((resolve) => {{
+            var totalHeight = 0;
+            var distance = 100;
+            var timer = setInterval(() => {{
+                var scrollHeight = document.body.scrollHeight;
+                window.scrollBy(0, distance);
+                totalHeight += distance;
+        
+                if(totalHeight >= scrollHeight - window.innerHeight){{
+                    clearInterval(timer);
+                    resolve("ok");
+                }}
+            }}, {});
+        }});"#,
+        timeout_ms
+    )
+}
 
 pub struct BrowserController {
     browser: Browser,
@@ -42,15 +46,18 @@ impl BrowserController {
             .sandbox(!is_docker)
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
-        let browser = Browser::new(options).context("browser error")?;
+        let browser = Browser::new(options).context("browser launching error")?;
 
         Ok(BrowserController { browser })
     }
 
     pub async fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
         // we create a new incognito window (no context)
-        let ctx = self.browser.new_context()?;
-        let tab = ctx.new_tab()?;
+        let ctx = self
+            .browser
+            .new_context()
+            .context("could not create incognito context")?;
+        let tab = ctx.new_tab().context("could not create new tab")?;
 
         let nv = match tab.navigate_to(&url) {
             Ok(t) => t,
@@ -64,7 +71,6 @@ impl BrowserController {
             warn!("error waiting for navigation, retrying {}", e);
             nv.wait_until_navigated()?;
         }
-
         // to do, have a better wait function
         if let Err(_) = tab.wait_for_element("a") {
             warn!("Waiting for a element for url {} is retrying", url);
@@ -82,21 +88,22 @@ impl BrowserController {
             let collection_name = extract_collection_name(&url);
             debug!("taking screenshot of {}", &url);
 
-            let _png =
-                tab.capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)?;
+            let _png = tab
+                .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, false)
+                .context(format!("screenshot for {} could not be captured", &url))?;
             let filename = get_tmp_screenshot_dir(&collection_name);
             debug!("saving temporary screenshot to {}", filename);
 
-            fs::write(filename, _png)?;
+            fs::write(filename, _png).context(format!("could not save screenshot for {}", &url))?;
         }
 
         debug!("scrolling....");
-        match tab.evaluate(SCROLL_JS, true) {
+        match tab.evaluate(&get_scroll_script(60), true) {
             Ok(_) => {}
             Err(_) => {
                 // we retry
                 warn!("Scrolling for url {} is retrying", url);
-                tab.evaluate(SCROLL_JS, true)?;
+                tab.evaluate(&get_scroll_script(30), true)?;
             }
         };
 
@@ -117,7 +124,15 @@ impl BrowserController {
 
         let links = rs
             .iter()
-            .map(|x| x.get_attributes().unwrap().unwrap())
+            .map(|x| {
+                x.get_attributes()
+                    .context(format!(
+                        "could not get attributes for url {}",
+                        tab.get_url()
+                    ))
+                    .unwrap()
+                    .unwrap()
+            })
             .filter_map(|x| {
                 // TODO allow to filter specific links (filter mailto: etc)
                 for i in 0..x.len() {
@@ -132,7 +147,11 @@ impl BrowserController {
     }
 
     pub fn kill(&self) -> bool {
-        let pid = self.browser.get_process_id().unwrap();
+        let pid = self
+            .browser
+            .get_process_id()
+            .context("could not get process id for browser")
+            .unwrap();
         let s = System::new();
         if let Some(process) = s.process(Pid::from_u32(pid)) {
             debug!("killing process with id {}", pid);

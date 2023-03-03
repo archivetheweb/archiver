@@ -1,10 +1,18 @@
 use std::{collections::HashSet, path::PathBuf};
 
+use crate::utils::FORMAT_STRING;
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::utils::FORMAT_STRING;
+#[derive(Error, Debug)]
+pub enum ArchiverError {
+    #[error("contract_interaction: {0}")]
+    ContractInteractionError(String),
+    #[error("early_termination")]
+    EarlyTermination,
+}
 
 #[derive(Debug)]
 pub struct CrawlUploadResult {
