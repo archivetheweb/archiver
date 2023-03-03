@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use anyhow::anyhow;
+use anyhow::Context;
 use arloader::Arweave;
 use atw::{
     action::{DeleteArchiveRequest, RegisterUploader},
@@ -47,7 +47,7 @@ impl Contract {
             .get_contract_with_query(&self.contract_id, q)
             .await?;
 
-        let s = res.state.unwrap();
+        let s = res.state.context("could not unwrap state").unwrap();
         let s: State = serde_json::from_value(s)?;
 
         Ok(s)
@@ -68,10 +68,10 @@ impl Contract {
             .get_contract_with_query(&self.contract_id, q)
             .await?;
 
-        let s = match res.result {
-            Some(s) => s,
-            None => return Err(anyhow!("Could not unwrap result")),
-        };
+        let s = res
+            .result
+            .context("could not unwrap archiving_request_for result")
+            .unwrap();
 
         let s: Vec<ArchiveRequest> = serde_json::from_value(serde_json::Value::Array(s))?;
 
@@ -87,10 +87,10 @@ impl Contract {
             .get_contract_with_query(&self.contract_id, q)
             .await?;
 
-        let s = match res.result {
-            Some(s) => s,
-            None => return Err(anyhow!("Could not unwrap result")),
-        };
+        let s = res
+            .result
+            .context("could not unwrap uploaders result")
+            .unwrap();
 
         let s =
             serde_json::from_value::<Vec<HashMap<String, Uploader>>>(serde_json::Value::Array(s))?
@@ -114,11 +114,10 @@ impl Contract {
             .get_contract_with_query(&self.contract_id, q)
             .await?;
 
-        let s = match res.result {
-            Some(s) => s,
-            None => return Err(anyhow!("Could not unwrap result")),
-        };
-
+        let s = res
+            .result
+            .context("could not unwrap archives_by_url result")
+            .unwrap();
         let s: Vec<BTreeMap<usize, ArchiveSubmission>> =
             serde_json::from_value(serde_json::Value::Array(s))?;
 
