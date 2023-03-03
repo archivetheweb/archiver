@@ -5,6 +5,7 @@ extern crate derive_builder;
 #[macro_use]
 extern crate lazy_static;
 
+pub mod archiver;
 pub mod browser_controller;
 pub mod contract;
 pub mod crawler;
