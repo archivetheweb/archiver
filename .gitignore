@@ -16,5 +16,6 @@ Cargo.lock
 collections
 secret*
 .secrets*
-test_wallet*
+wallet*
+*test_wallet*
 ex_crawls/

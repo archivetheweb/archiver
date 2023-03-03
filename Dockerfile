@@ -39,9 +39,9 @@ RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.d
 RUN rm -rf /var/lib/apt/lists/*
 
 # COPY  ./target/debug/archiver-v1 ./
-# COPY  ./archiver/.secret/test_wallet.json ./.secret/
+# COPY  ./archiver/.secret/wallet.json ./.secret/
 COPY --from=builder /app/target/release/archiver-v1 ./
-COPY --from=builder /app/archiver/.secret/test_wallet.json ./.secret/
+COPY --from=builder /app/archiver/.secret/wallet.json ./.secret/
 
 ENV RUST_LOG=debug
 

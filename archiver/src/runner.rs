@@ -70,7 +70,7 @@ impl LaunchOptionsBuilder {
         Some(PathBuf::from(format!("")))
     }
     fn default_arweave_wallet_dir(&self) -> PathBuf {
-        PathBuf::from(".secret/test_wallet.json")
+        PathBuf::from(".secret/wallet.json")
     }
     fn default_currency(&self) -> String {
         String::from("arweave")

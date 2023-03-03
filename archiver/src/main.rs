@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
     signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
 
     let arweave = Arweave::from_keypair_path(
-        PathBuf::from(".secret/test_wallet.json"),
+        PathBuf::from(".secret/wallet.json"),
         Url::from_str("https://arweave.net")?,
     )
     .await?;
