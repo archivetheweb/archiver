@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::Context;
 use arloader::{
     transaction::{Base64, FromUtf8Strs, Tag},
     Arweave,
@@ -9,7 +9,10 @@ use reqwest::{Client, StatusCode, Url};
 use serde_json::Value;
 use std::str::FromStr;
 
-use crate::types::{InteractionResponse, APP_NAME, CONTRACT_TX_ID, INPUT, SDK, SMARTWEAVE_ACTION};
+use crate::{
+    errors::WarpDREError,
+    types::{InteractionResponse, APP_NAME, CONTRACT_TX_ID, INPUT, SDK, SMARTWEAVE_ACTION},
+};
 
 pub struct Interactor {
     client: Client,
@@ -46,7 +49,7 @@ impl InteractorOptionsBuilder {
 impl Interactor {
     pub fn new(lo: InteractorOptions, arweave: Arweave) -> anyhow::Result<Self> {
         if lo.contract_address == "" {
-            return Err(anyhow!("contract address must be set"));
+            return Err(WarpDREError::ArgumentError("contract address must be set".into()).into());
         }
 
         Ok(Self {
@@ -67,7 +70,11 @@ impl Interactor {
                 (1, 1),
                 false,
             )
-            .await?;
+            .await
+            .context(format!(
+                "could not create arweave stransaction with input {:?}",
+                input
+            ))?;
 
         let tx = self.arweave.sign_transaction(tx)?;
 
@@ -82,7 +89,8 @@ impl Interactor {
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .send()
-            .await?;
+            .await
+            .context(format!("could not create register with warp sequencer"))?;
 
         if res.status() == StatusCode::OK {
             let res = res.json::<_>().await?;
@@ -90,11 +98,12 @@ impl Interactor {
             return Ok(res);
         } else {
             debug!("Status is {}", res.status());
-            return Err(anyhow!(
+            return Err(WarpDREError::WarpGatewayError(format!(
                 "Status:{}, error: {}",
                 res.status(),
                 res.text().await?
-            ));
+            ))
+            .into());
         }
     }
 

@@ -2,12 +2,14 @@ use derive_builder::Builder;
 use reqwest::{Client, StatusCode, Url};
 use std::{collections::HashMap, str::FromStr};
 
-use crate::types::{BlacklistItem, Cached, ContractRoot, ContractWithQuery, ErrorsItem, Status};
+use crate::{
+    errors::WarpDREError,
+    types::{BlacklistItem, Cached, ContractRoot, ContractWithQuery, ErrorsItem, Status},
+};
 pub struct WarpDRE {
     client: Client,
     url: Url,
 }
-use anyhow::anyhow;
 
 #[derive(Builder, Debug)]
 #[builder(setter(into))]
@@ -51,7 +53,7 @@ impl WarpDRE {
         if res.status() == StatusCode::OK {
             return Ok(res.json::<_>().await?);
         } else {
-            return Err(anyhow!(res.text().await?));
+            return Err(WarpDREError::WarpGatewayError(format!("{}", res.text().await?)).into());
         }
     }
 
@@ -70,7 +72,7 @@ impl WarpDRE {
         if res.status() == StatusCode::OK {
             return Ok(res.json::<_>().await?);
         } else {
-            return Err(anyhow!(res.text().await?));
+            return Err(WarpDREError::WarpGatewayError(format!("{}", res.text().await?)).into());
         }
     }
 
@@ -91,7 +93,7 @@ impl WarpDRE {
         if res.status() == StatusCode::OK {
             return Ok(res.json::<_>().await?);
         } else {
-            return Err(anyhow!(res.text().await?));
+            return Err(WarpDREError::WarpGatewayError(format!("{}", res.text().await?)).into());
         }
     }
 
@@ -105,7 +107,7 @@ impl WarpDRE {
         if res.status() == StatusCode::OK {
             return Ok(res.json::<_>().await?);
         } else {
-            return Err(anyhow!(res.text().await?));
+            return Err(WarpDREError::WarpGatewayError(format!("{}", res.text().await?)).into());
         }
     }
 
@@ -119,7 +121,7 @@ impl WarpDRE {
         if res.status() == StatusCode::OK {
             return Ok(res.json::<_>().await?);
         } else {
-            return Err(anyhow!(res.text().await?));
+            return Err(WarpDREError::WarpGatewayError(format!("{}", res.text().await?)).into());
         }
     }
 
@@ -133,7 +135,7 @@ impl WarpDRE {
         if res.status() == StatusCode::OK {
             return Ok(res.json::<_>().await?);
         } else {
-            return Err(anyhow!(res.text().await?));
+            return Err(WarpDREError::WarpGatewayError(format!("{}", res.text().await?)).into());
         }
     }
 }
