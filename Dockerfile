@@ -2,24 +2,24 @@ FROM rust:1.67 as builder
 
 RUN mkdir app
 WORKDIR /app
-COPY ./archivor/src ./archivor/src
-COPY ./archivor/Cargo.lock ./archivor/Cargo.lock
-COPY ./archivor/Cargo.toml ./archivor/Cargo.toml
-COPY ./archivor/config.yaml ./archivor/config.yaml
-COPY ./archivor/.secret ./archivor/.secret
+COPY ./archiver/src ./archiver/src
+COPY ./archiver/Cargo.lock ./archiver/Cargo.lock
+COPY ./archiver/Cargo.toml ./archiver/Cargo.toml
+COPY ./archiver/config.yaml ./archiver/config.yaml
+COPY ./archiver/.secret ./archiver/.secret
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 
 COPY ./warp-contracts-rust/shared ./warp-contracts-rust/shared 
 
-COPY ./warp-contracts-rust/awt/Cargo.lock ./warp-contracts-rust/awt/Cargo.lock 
-COPY ./warp-contracts-rust/awt/Cargo.toml ./warp-contracts-rust/awt/Cargo.toml 
+COPY ./warp-contracts-rust/atw/Cargo.lock ./warp-contracts-rust/atw/Cargo.lock 
+COPY ./warp-contracts-rust/atw/Cargo.toml ./warp-contracts-rust/atw/Cargo.toml 
 
-COPY ./warp-contracts-rust/awt/contract/definition/src ./warp-contracts-rust/awt/contract/definition/src 
-COPY ./warp-contracts-rust/awt/contract/definition/Cargo.toml ./warp-contracts-rust/awt/contract/definition/Cargo.toml 
+COPY ./warp-contracts-rust/atw/contract/definition/src ./warp-contracts-rust/atw/contract/definition/src 
+COPY ./warp-contracts-rust/atw/contract/definition/Cargo.toml ./warp-contracts-rust/atw/contract/definition/Cargo.toml 
 
-COPY ./warp-contracts-rust/awt/contract/implementation/src ./warp-contracts-rust/awt/contract/implementation/src 
-COPY ./warp-contracts-rust/awt/contract/implementation/Cargo.toml ./warp-contracts-rust/awt/contract/implementation/Cargo.toml 
+COPY ./warp-contracts-rust/atw/contract/implementation/src ./warp-contracts-rust/atw/contract/implementation/src 
+COPY ./warp-contracts-rust/atw/contract/implementation/Cargo.toml ./warp-contracts-rust/atw/contract/implementation/Cargo.toml 
 
 COPY ./warp_dre ./warp_dre 
 
@@ -39,9 +39,9 @@ RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.d
 RUN rm -rf /var/lib/apt/lists/*
 
 # COPY  ./target/debug/archiver-v1 ./
-# COPY  ./archivor/.secret/test_wallet.json ./.secret/
+# COPY  ./archiver/.secret/test_wallet.json ./.secret/
 COPY --from=builder /app/target/release/archiver-v1 ./
-COPY --from=builder /app/archivor/.secret/test_wallet.json ./.secret/
+COPY --from=builder /app/archiver/.secret/test_wallet.json ./.secret/
 
 ENV RUST_LOG=debug
 

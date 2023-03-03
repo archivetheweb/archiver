@@ -1,2 +1,2 @@
 [workspace]
-members = ["archivor/", "warp_dre/"]
+members = ["archiver/", "warp_dre/"]
