@@ -43,6 +43,13 @@ pub struct ArchivingResult {
     pub title: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct BundlrUploadID {
+    pub id: String,
+    pub min: usize,
+    pub max: usize,
+}
+
 #[derive(Debug)]
 pub struct ArchiveInfo {
     depth: u8,

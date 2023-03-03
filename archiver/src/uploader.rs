@@ -7,18 +7,19 @@ use itertools::Itertools;
 use std::{
     path::PathBuf,
     str::FromStr,
+    sync::{self, Arc},
     time::{Duration, SystemTime},
 };
 use tokio::fs;
 use tokio_retry::{strategy::FixedInterval, Retry};
 
-use anyhow::anyhow;
-use reqwest::Url;
+use anyhow::{anyhow, Context};
+use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    types::{ArchiveInfo, ArchivingResult, CrawlUploadResult},
+    types::{ArchiveInfo, ArchivingResult, BundlrUploadID, CrawlUploadResult},
     utils::{
         assert_stream_send, get_unix_timestamp, jitter, APP_NAME, APP_VERSION, BUNDLR_URL,
         DRIVE_ID, PARENT_FOLDER_ID, WARC_APPLICATION_TYPE,
@@ -28,6 +29,7 @@ use crate::{
 pub struct Uploader {
     _currency: String,
     arweave: Arweave,
+    client: sync::Arc<reqwest::Client>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -94,6 +96,7 @@ impl Uploader {
         Ok(Uploader {
             _currency: currency.to_string(),
             arweave,
+            client: Arc::new(Client::new()),
         })
     }
 
@@ -131,7 +134,10 @@ impl Uploader {
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
     ) -> anyhow::Result<(String, String)> {
-        let data = fs::read(file_path).await?;
+        let data = fs::read(&file_path).await.context(format!(
+            "upload_warc: could not read file at path {:?}",
+            &file_path
+        ))?;
         let name = match file_path.file_name() {
             Some(n) => n.to_str().unwrap(),
             None => return Err(anyhow!("invalid file path {:?}", file_path)),
@@ -139,8 +145,8 @@ impl Uploader {
 
         let data_len = data.len();
 
-        let mut tags = append_app_tags(
-            create_arfs_file_data_tags(),
+        let mut tags = Self::append_app_tags(
+            Self::create_arfs_file_data_tags(),
             &archive_info.url(),
             archive_info.unix_ts(),
             archive_info.depth(),
@@ -157,8 +163,8 @@ impl Uploader {
             WARC_APPLICATION_TYPE.into(),
             Some("gzip".into()),
         );
-        let mut mt_tags = append_app_tags(
-            create_arfs_file_metadata_tags(),
+        let mut mt_tags = Self::append_app_tags(
+            Self::create_arfs_file_metadata_tags(),
             &archive_info.url(),
             archive_info.unix_ts(),
             archive_info.depth(),
@@ -178,7 +184,10 @@ impl Uploader {
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
     ) -> anyhow::Result<(String, String)> {
-        let screenshot_data = fs::read(file_path).await?;
+        let screenshot_data = fs::read(&file_path).await.context(format!(
+            "could not read screenshot_data at {:?}",
+            &file_path
+        ))?;
         let screenshot_name = match file_path.file_name() {
             Some(n) => n.to_str().unwrap(),
             None => return Err(anyhow!("screenshot: invalid file path {:?}", file_path)),
@@ -190,8 +199,8 @@ impl Uploader {
         let screenshot_file_tx_id = self
             .upload_to_bundlr(
                 screenshot_data,
-                append_app_tags(
-                    create_arfs_file_data_tags(),
+                Self::append_app_tags(
+                    Self::create_arfs_file_data_tags(),
                     &archive_info.url(),
                     archive_info.unix_ts(),
                     archive_info.depth(),
@@ -210,8 +219,8 @@ impl Uploader {
         let screenshot_metadata_tx_id = self
             .upload_to_bundlr(
                 serde_json::to_vec(&metadata).unwrap(),
-                append_app_tags(
-                    create_arfs_file_metadata_tags(),
+                Self::append_app_tags(
+                    Self::create_arfs_file_metadata_tags(),
                     &archive_info.url(),
                     archive_info.unix_ts(),
                     archive_info.depth(),
@@ -231,7 +240,7 @@ impl Uploader {
         let file_tx = self.arweave.sign_data_item(file_tx)?;
         let file_tx_id = file_tx.id.to_string();
 
-        let client = reqwest::Client::new();
+        let client = self.client.clone();
 
         let data = file_tx.serialize()?;
         let size = data.len();
@@ -249,12 +258,19 @@ impl Uploader {
                     let res = res.text().await.unwrap();
                     debug!("{res}")
                 }
-                Err(e) => return Err(anyhow!(e.to_string())),
+                Err(e) => {
+                    return Err(anyhow!(
+                        "could not send small bundle to bundlr {}",
+                        e.to_string()
+                    ))
+                }
             }
 
             return Ok(file_tx_id);
         } else {
             // otherwise we need to chunk the data and send it
+            debug!("Sending large bundles to Bundlr, chunking...");
+
             let upload_info = client
                 .get(format!("{}/chunks/arweave/-1/-1", BUNDLR_URL))
                 .header("x-chunking-version", "2")
@@ -281,6 +297,8 @@ impl Uploader {
                 .map(|x| x.collect::<Vec<u8>>())
                 .collect::<Vec<Vec<u8>>>();
 
+            // we need to help the compiler with assert_stream_send
+            // as we have a stream being awaited in multiple threads
             let mut stream = assert_stream_send(
                 tokio_stream::iter(data.iter().enumerate())
                     .map(|p| {
@@ -343,55 +361,49 @@ impl Uploader {
             return Ok(file_tx_id);
         }
     }
+
+    fn append_app_tags(
+        mut tags: Vec<Tag<String>>,
+        url: &str,
+        timestamp: i64,
+        depth: u8,
+    ) -> Vec<Tag<String>> {
+        let mut t = vec![
+            // App Tags
+            Tag::<String>::from_utf8_strs("App-Name", &APP_NAME).unwrap(),
+            Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
+            Tag::<String>::from_utf8_strs("Url", url.into()).unwrap(),
+            Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
+            Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
+        ];
+        tags.append(&mut t);
+        return tags;
+    }
+
+    fn create_arfs_file_metadata_tags() -> Vec<Tag<String>> {
+        vec![
+            // Ardrive FS tags
+            Tag::<String>::from_utf8_strs("ArFS", "0.11").unwrap(),
+            Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
+            Tag::<String>::from_utf8_strs("Content-Type", "application/json").unwrap(),
+            Tag::<String>::from_utf8_strs("Drive-Id", &DRIVE_ID).unwrap(),
+            Tag::<String>::from_utf8_strs("Entity-Type", "file").unwrap(),
+            Tag::<String>::from_utf8_strs("File-Id", &Uuid::new_v4().to_string()).unwrap(),
+            Tag::<String>::from_utf8_strs("Parent-Folder-Id", &PARENT_FOLDER_ID).unwrap(),
+            Tag::<String>::from_utf8_strs("Unix-Time", &get_unix_timestamp().as_secs().to_string())
+                .unwrap(),
+        ]
+    }
+
+    fn create_arfs_file_data_tags() -> Vec<Tag<String>> {
+        vec![
+            // Ardive FS tags
+            Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
+        ]
+    }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct BundlrUploadID {
-    pub id: String,
-    pub min: usize,
-    pub max: usize,
-}
 const CHUNKING_THRESHOLD: usize = 50_000_000;
-
-fn append_app_tags(
-    mut tags: Vec<Tag<String>>,
-    url: &str,
-    timestamp: i64,
-    depth: u8,
-) -> Vec<Tag<String>> {
-    let mut t = vec![
-        // App Tags
-        Tag::<String>::from_utf8_strs("App-Name", &APP_NAME).unwrap(),
-        Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
-        Tag::<String>::from_utf8_strs("Url", url.into()).unwrap(),
-        Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
-        Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
-    ];
-    tags.append(&mut t);
-    return tags;
-}
-
-fn create_arfs_file_metadata_tags() -> Vec<Tag<String>> {
-    vec![
-        // Ardrive FS tags
-        Tag::<String>::from_utf8_strs("ArFS", "0.11").unwrap(),
-        Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
-        Tag::<String>::from_utf8_strs("Content-Type", "application/json").unwrap(),
-        Tag::<String>::from_utf8_strs("Drive-Id", &DRIVE_ID).unwrap(),
-        Tag::<String>::from_utf8_strs("Entity-Type", "file").unwrap(),
-        Tag::<String>::from_utf8_strs("File-Id", &Uuid::new_v4().to_string()).unwrap(),
-        Tag::<String>::from_utf8_strs("Parent-Folder-Id", &PARENT_FOLDER_ID).unwrap(),
-        Tag::<String>::from_utf8_strs("Unix-Time", &get_unix_timestamp().as_secs().to_string())
-            .unwrap(),
-    ]
-}
-
-fn create_arfs_file_data_tags() -> Vec<Tag<String>> {
-    vec![
-        // Ardive FS tags
-        Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
-    ]
-}
 
 #[cfg(test)]
 mod test {
