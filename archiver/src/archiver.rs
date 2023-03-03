@@ -12,9 +12,10 @@ use std::{
 use crate::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
+    types::ArchiverError,
     utils::get_unix_timestamp,
 };
-use anyhow::anyhow;
+use anyhow::Context;
 use atw::state::{ArchiveOptions, ArchiveRequest, ArchiveSubmission};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use cron::Schedule;
@@ -91,7 +92,12 @@ impl Archiver {
                 } else {
                     debug!("Sending new archive {:?}", archive_request);
                     self.processing.insert(archive_request.id.clone());
-                    archiver_tx.send(archive_request).await?;
+                    match archiver_tx.send(archive_request).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("could not send archive_request to processing channel {}", e)
+                        }
+                    };
                 }
             } else {
                 // we check if channel is empty
@@ -145,9 +151,12 @@ impl Archiver {
                                     }
                                 };
                             }
-                            Err(e) => {
-                                error!("Error archiving req {:?}. Error: {:?}", id, e);
-                            }
+                            Err(e) => match e.downcast_ref::<ArchiverError>() {
+                                Some(ArchiverError::EarlyTermination) => {}
+                                _ => {
+                                    error!("Error archiving req {:?}. Error: {:?}", id, e);
+                                }
+                            },
                         };
                         return;
                     }
@@ -165,10 +174,16 @@ impl Archiver {
         should_terminate: Arc<AtomicBool>,
     ) -> anyhow::Result<()> {
         if should_terminate.load(Ordering::Relaxed) {
-            return Err(anyhow!("Early termination"));
+            return Err(ArchiverError::EarlyTermination.into());
         }
 
-        let requests = c.archiving_requests_for(&wallet_address).await?;
+        let requests = c
+            .archiving_requests_for(&wallet_address)
+            .await
+            .context(format!(
+                "could not fetch archiving requests for {}",
+                wallet_address
+            ))?;
         debug!("Requests: {:#?}", requests);
 
         let mut valid_reqs = vec![];
@@ -177,7 +192,14 @@ impl Archiver {
         for r in requests {
             if r.end_timestamp < get_unix_timestamp().as_secs() as i64 {
                 debug!("deleting archive request with id {}", r.id);
-                c.delete_archive_request(&r.id).await?;
+                match c.delete_archive_request(&r.id).await {
+                    Ok(_) => {
+                        debug!("deleted archive request with id {}", r.id);
+                    }
+                    Err(_) => {
+                        error!("could not delete archive request with id {}", r.id)
+                    }
+                };
                 continue;
             }
             valid_reqs.push(r);
@@ -197,6 +219,10 @@ impl Archiver {
                     req.latest_archived_timestamp.try_into().unwrap_or(0),
                     0,
                 )
+                .context(format!(
+                    "could not create NaiveDateTime from timestamp {} in req {}",
+                    req.latest_archived_timestamp, req.id
+                ))
                 .unwrap(),
                 Utc,
             );
@@ -212,7 +238,12 @@ impl Archiver {
                 None => continue,
             };
 
-            archiver_tx.send(req).await?;
+            match archiver_tx.send(req).await {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("could not send to archive_tx channel {}", e)
+                }
+            };
         }
         Ok(())
     }
@@ -236,10 +267,12 @@ impl Archiver {
 
         debug!("Launching crawler with options: \n {:#?}", options);
 
-        let r = Runner::new(options).await?;
+        let r = Runner::new(options)
+            .await
+            .context(format!("could not instantiate runner"))?;
 
         if should_terminate.load(Ordering::Relaxed) {
-            return Err(anyhow!("Early termination"));
+            return Err(ArchiverError::EarlyTermination.into());
         }
 
         let url = &req.options.urls[0];
@@ -249,12 +282,13 @@ impl Archiver {
         debug!("result {:?}", result);
 
         if should_terminate.load(Ordering::Relaxed) {
-            return Err(anyhow!("Early termination"));
+            return Err(ArchiverError::EarlyTermination.into());
         }
 
         let main_file = result.warc_files[0].clone();
 
-        let metadata = fs::metadata(&main_file)?;
+        let metadata = fs::metadata(&main_file)
+            .context(format!("could not open metadata file at {:?}", &main_file))?;
 
         let size = metadata.len();
 
@@ -267,25 +301,26 @@ impl Archiver {
         debug!("Upload result {:#?}", upload_result);
 
         if should_terminate.load(Ordering::Relaxed) {
-            return Err(anyhow!("Early termination"));
+            return Err(ArchiverError::EarlyTermination.into());
         }
-
+        let archive_submission = ArchiveSubmission {
+            full_url: url.into(),
+            size: size as usize,
+            uploader_address: wallet_address.clone(),
+            archive_request_id: req.id.clone(),
+            timestamp: ts,
+            arweave_tx: upload_result.warc_id[0].clone(),
+            options: ArchiveOptions {
+                depth: req.options.depth,
+                domain_only: req.options.domain_only,
+            },
+            screenshot_tx: upload_result.screenshot_id,
+            title: title,
+        };
         contract
-            .submit_archive(ArchiveSubmission {
-                full_url: url.into(),
-                size: size as usize,
-                uploader_address: wallet_address.clone(),
-                archive_request_id: req.id.clone(),
-                timestamp: ts,
-                arweave_tx: upload_result.warc_id[0].clone(),
-                options: ArchiveOptions {
-                    depth: req.options.depth,
-                    domain_only: req.options.domain_only,
-                },
-                screenshot_tx: upload_result.screenshot_id,
-                title: title,
-            })
-            .await?;
+            .submit_archive(&archive_submission)
+            .await
+            .context(format!("could not submit archive {:?}", archive_submission))?;
         Ok(())
     }
 }
