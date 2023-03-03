@@ -194,7 +194,7 @@ impl WarcWriter {
                     let ts = name_elems[2].clone().split_at(14).0;
                     // the name matters as we will be using it to
                     let new_full_name =
-                        format!("archivoor_{}_{}_{}.warc.gz", ts, encode(new_name), depth);
+                        format!("archiver_{}_{}_{}.warc.gz", ts, encode(new_name), depth);
                     let mut new_path = x.path().clone();
                     new_path.pop();
                     new_path.push(&new_full_name);
@@ -226,7 +226,7 @@ impl WarcWriter {
         let mut dir = self.archive_dir.clone();
         dir.pop();
         dir.push("screenshots");
-        dir.push(format!("archivoor_{}_{}_{}.png", ts, encode(domain), depth));
+        dir.push(format!("archiver_{}_{}_{}.png", ts, encode(domain), depth));
         let screenshot_dir = get_tmp_screenshot_dir(&self.archive_name);
         fs::copy(&screenshot_dir, &dir)?;
         fs::remove_file(screenshot_dir)?;
@@ -320,7 +320,7 @@ fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
       dedup_policy: skip
       dedup_index_url: "redis://localhost:6379/0/pywb:{coll}:cdxj"
       source_coll: live
-      filename_template: <unprocessed>-archivoor-{timestamp}-{random}.warc.gz
+      filename_template: <unprocessed>-archiver-{timestamp}-{random}.warc.gz
     "#;
 
     let mut p = path.clone();

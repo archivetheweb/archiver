@@ -11,7 +11,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use archivoor_v1::{
+use archiver_v1::{
     contract::Contract,
     runner::{LaunchOptions, Runner},
     types::{BundlrBalance, BUNDLR_URL},

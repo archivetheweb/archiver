@@ -74,7 +74,7 @@ impl ArchiveInfo {
             None => return Err(anyhow!("invalid file path {:?}", file_path)),
         };
 
-        //archivoor_<ts>_<url>_<depth>.warc.gz
+        //archiver_<ts>_<url>_<depth>.warc.gz
         let elems = name.split("_").collect::<Vec<&str>>();
 
         let depth: u8 = elems[3].split_once(".").unwrap().0.parse()?;

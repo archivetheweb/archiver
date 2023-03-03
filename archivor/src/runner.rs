@@ -61,7 +61,7 @@ impl LaunchOptions {
 
 impl LaunchOptionsBuilder {
     fn default_archive_name(&self) -> Option<String> {
-        Some(String::from("archivoor"))
+        Some(String::from("archiver"))
     }
     fn default_base_url(&self) -> String {
         BASE_URL.into()

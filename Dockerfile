@@ -38,15 +38,15 @@ RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.d
 
 RUN rm -rf /var/lib/apt/lists/*
 
-# COPY  ./target/debug/archivoor-v1 ./
+# COPY  ./target/debug/archiver-v1 ./
 # COPY  ./archivor/.secret/test_wallet.json ./.secret/
-COPY --from=builder /app/target/release/archivoor-v1 ./
+COPY --from=builder /app/target/release/archiver-v1 ./
 COPY --from=builder /app/archivor/.secret/test_wallet.json ./.secret/
 
 ENV RUST_LOG=debug
 
 ENV IN_DOCKER=true
 
-ENTRYPOINT ["./archivoor-v1"]
+ENTRYPOINT ["./archiver-v1"]
 # ENTRYPOINT ["tail", "-f", "/dev/null"]
 

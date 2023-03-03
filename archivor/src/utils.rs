@@ -7,7 +7,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-pub const ARCHIVE_DIR: &str = "archivoor";
+pub const ARCHIVE_DIR: &str = "archiver";
 pub const BASE_URL: &str = "http://localhost";
 pub const WARC_APPLICATION_TYPE: &str = "application/warc";
 
@@ -94,7 +94,7 @@ pub fn get_unix_timestamp() -> Duration {
 }
 
 pub fn get_tmp_screenshot_dir(collection_name: &str) -> String {
-    format!("/tmp/archivoor_{}.png", collection_name)
+    format!("/tmp/archiver_{}.png", collection_name)
 }
 
 pub fn get_random_string(len: i32) -> String {
@@ -108,7 +108,7 @@ pub fn get_random_string(len: i32) -> String {
 pub fn create_random_tmp_folder() -> anyhow::Result<PathBuf> {
     let rand_folder_name: String = get_random_string(11);
 
-    let path = PathBuf::from(format!("/tmp/archivoor-{}", rand_folder_name));
+    let path = PathBuf::from(format!("/tmp/archiver-{}", rand_folder_name));
     fs::create_dir(&path)?;
     Ok(path)
 }
