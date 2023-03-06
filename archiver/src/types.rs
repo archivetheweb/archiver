@@ -17,9 +17,7 @@ pub enum ArchiverError {
 #[derive(Debug)]
 pub struct CrawlUploadResult {
     pub screenshot_id: String,
-    pub screenshot_metadata_data_id: String,
     pub warc_id: Vec<String>,
-    pub warc_metadata_data_id: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

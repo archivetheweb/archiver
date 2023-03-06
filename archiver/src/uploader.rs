@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
     str::FromStr,
     sync::{self, Arc},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 use tokio::fs;
 use tokio_retry::{strategy::FixedInterval, Retry};
@@ -16,14 +16,10 @@ use tokio_retry::{strategy::FixedInterval, Retry};
 use anyhow::{anyhow, Context};
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     types::{ArchiveInfo, ArchivingResult, BundlrUploadID, CrawlUploadResult},
-    utils::{
-        assert_stream_send, get_unix_timestamp, jitter, APP_NAME, APP_VERSION, BUNDLR_URL,
-        DRIVE_ID, PARENT_FOLDER_ID, WARC_APPLICATION_TYPE,
-    },
+    utils::{assert_stream_send, jitter, APP_NAME, APP_VERSION, BUNDLR_URL, WARC_APPLICATION_TYPE},
 };
 
 pub struct Uploader {
@@ -36,43 +32,6 @@ pub struct Uploader {
 struct BundlrRes {
     id: String,
     timestamp: u64,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ArfsMetadata {
-    name: String,
-    size: usize,
-    #[serde(rename = "lastModifiedDate")]
-    last_modified_date: u128,
-    #[serde(rename = "dataTxId")]
-    data_tx_id: String,
-    #[serde(rename = "dataContentType")]
-    data_content_type: String,
-    #[serde(rename = "dataEncoding")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data_encoding: Option<String>,
-}
-
-impl ArfsMetadata {
-    pub fn new(
-        name: String,
-        size: usize,
-        data_tx_id: String,
-        data_content_type: String,
-        data_encoding: Option<String>,
-    ) -> Self {
-        Self {
-            name,
-            size,
-            data_tx_id,
-            data_content_type,
-            data_encoding,
-            last_modified_date: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_millis(),
-        }
-    }
 }
 
 impl Uploader {
@@ -105,27 +64,21 @@ impl Uploader {
         crawl: &ArchivingResult,
     ) -> anyhow::Result<CrawlUploadResult> {
         let mut warc_file_ids = vec![];
-        let mut warc_metadata_ids = vec![];
-
         // TODO make these recursive bundles
 
         // first we do the warc files
         for file_path in &crawl.warc_files {
-            let (file_tx_id, file_metadata_id) =
-                self.upload_warc(file_path, &crawl.archive_info).await?;
+            let file_tx_id = self.upload_warc(file_path, &crawl.archive_info).await?;
             warc_file_ids.push(file_tx_id);
-            warc_metadata_ids.push(file_metadata_id);
         }
         // then the screenshot
-        let (screenshot_id, screenshot_metadata_id) = self
+        let screenshot_id = self
             .upload_screenshot(&crawl.screenshot_file, &crawl.archive_info)
             .await?;
 
         Ok(CrawlUploadResult {
             screenshot_id: screenshot_id,
-            screenshot_metadata_data_id: screenshot_metadata_id,
             warc_id: warc_file_ids,
-            warc_metadata_data_id: warc_metadata_ids,
         })
     }
 
@@ -133,20 +86,14 @@ impl Uploader {
         &self,
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
-    ) -> anyhow::Result<(String, String)> {
+    ) -> anyhow::Result<String> {
         let data = fs::read(&file_path).await.context(format!(
             "upload_warc: could not read file at path {:?}",
             &file_path
         ))?;
-        let name = match file_path.file_name() {
-            Some(n) => n.to_str().unwrap(),
-            None => return Err(anyhow!("invalid file path {:?}", file_path)),
-        };
-
-        let data_len = data.len();
 
         let mut tags = Self::append_app_tags(
-            Self::create_arfs_file_data_tags(),
+            vec![],
             &archive_info.url(),
             archive_info.unix_ts(),
             archive_info.depth(),
@@ -156,51 +103,25 @@ impl Uploader {
         // first we deploy the file data
         let file_tx_id = self.upload_to_bundlr(data, tags).await?;
 
-        let metadata = ArfsMetadata::new(
-            name.into(),
-            data_len,
-            file_tx_id.clone(),
-            WARC_APPLICATION_TYPE.into(),
-            Some("gzip".into()),
-        );
-        let mut mt_tags = Self::append_app_tags(
-            Self::create_arfs_file_metadata_tags(),
-            &archive_info.url(),
-            archive_info.unix_ts(),
-            archive_info.depth(),
-        );
-        mt_tags.push(Tag::<String>::from_utf8_strs("Content-Encoding", "gzip").unwrap());
-
-        // then the metadata
-        let metadata_tx_id = self
-            .upload_to_bundlr(serde_json::to_vec(&metadata).unwrap(), mt_tags)
-            .await?;
-
-        return Ok((file_tx_id, metadata_tx_id));
+        return Ok(file_tx_id);
     }
 
     pub async fn upload_screenshot<'a>(
         &self,
         file_path: &PathBuf,
         archive_info: &ArchiveInfo,
-    ) -> anyhow::Result<(String, String)> {
+    ) -> anyhow::Result<String> {
         let screenshot_data = fs::read(&file_path).await.context(format!(
             "could not read screenshot_data at {:?}",
             &file_path
         ))?;
-        let screenshot_name = match file_path.file_name() {
-            Some(n) => n.to_str().unwrap(),
-            None => return Err(anyhow!("screenshot: invalid file path {:?}", file_path)),
-        };
-
-        let sc_data_len = screenshot_data.len();
 
         // first we deploy the file data
         let screenshot_file_tx_id = self
             .upload_to_bundlr(
                 screenshot_data,
                 Self::append_app_tags(
-                    Self::create_arfs_file_data_tags(),
+                    vec![],
                     &archive_info.url(),
                     archive_info.unix_ts(),
                     archive_info.depth(),
@@ -208,27 +129,7 @@ impl Uploader {
             )
             .await?;
 
-        let metadata = ArfsMetadata::new(
-            screenshot_name.into(),
-            sc_data_len,
-            screenshot_file_tx_id.clone(),
-            "image/png".into(),
-            None,
-        );
-
-        let screenshot_metadata_tx_id = self
-            .upload_to_bundlr(
-                serde_json::to_vec(&metadata).unwrap(),
-                Self::append_app_tags(
-                    Self::create_arfs_file_metadata_tags(),
-                    &archive_info.url(),
-                    archive_info.unix_ts(),
-                    archive_info.depth(),
-                ),
-            )
-            .await?;
-
-        return Ok((screenshot_file_tx_id, screenshot_metadata_tx_id));
+        return Ok(screenshot_file_tx_id);
     }
 
     async fn upload_to_bundlr(
@@ -375,31 +276,10 @@ impl Uploader {
             Tag::<String>::from_utf8_strs("Url", url.into()).unwrap(),
             Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
             Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
+            Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
         ];
         tags.append(&mut t);
         return tags;
-    }
-
-    fn create_arfs_file_metadata_tags() -> Vec<Tag<String>> {
-        vec![
-            // Ardrive FS tags
-            Tag::<String>::from_utf8_strs("ArFS", "0.11").unwrap(),
-            Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
-            Tag::<String>::from_utf8_strs("Content-Type", "application/json").unwrap(),
-            Tag::<String>::from_utf8_strs("Drive-Id", &DRIVE_ID).unwrap(),
-            Tag::<String>::from_utf8_strs("Entity-Type", "file").unwrap(),
-            Tag::<String>::from_utf8_strs("File-Id", &Uuid::new_v4().to_string()).unwrap(),
-            Tag::<String>::from_utf8_strs("Parent-Folder-Id", &PARENT_FOLDER_ID).unwrap(),
-            Tag::<String>::from_utf8_strs("Unix-Time", &get_unix_timestamp().as_secs().to_string())
-                .unwrap(),
-        ]
-    }
-
-    fn create_arfs_file_data_tags() -> Vec<Tag<String>> {
-        vec![
-            // Ardive FS tags
-            Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
-        ]
     }
 }
 

@@ -45,26 +45,6 @@ lazy_static! {
         }
         format!("{}_dev", v)
     };
-    pub static ref DRIVE_ID: String = {
-        let env = match std::env::var("ENVIRONMENT") {
-            Ok(e) => e,
-            Err(_) => "".into(),
-        };
-        if env == "production" {
-            return "83de6602-81b8-47a0-825a-3373637124c3".into();
-        }
-        "b7db009e-dd28-4546-ba5f-d091e09e2d6e".into()
-    };
-    pub static ref PARENT_FOLDER_ID: String = {
-        let env = match std::env::var("ENVIRONMENT") {
-            Ok(e) => e,
-            Err(_) => "".into(),
-        };
-        if env == "production" {
-            return "e437c0b1-ecc3-418d-8d1a-2f9202632b15".into();
-        }
-        "62afa694-5260-4553-bf39-e09c65a52d9d".into()
-    };
 }
 
 pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<String>> {
