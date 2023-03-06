@@ -28,10 +28,6 @@ A [Warp contract](https://warp.cc/) (smart contract on Arweave) is used to updat
 
 Warp contract address: `dD1DuvgM_Vigtnv4vl2H1IYn9CgLvYuhbEWPOL-_4Mw`
 
-#### Ardrive
-
-You will always be able to access the archives on [archivetheweb.com](https://archivetheweb.com). As we have also integrated with ArDrive, you can also view the different files directly using their application [here](https://app.ardrive.io/#/drives/83de6602-81b8-47a0-825a-3373637124c3/folders/e437c0b1-ecc3-418d-8d1a-2f9202632b15).
-
 ## How to run
 
 First ensure you have an Arweave wallet with AR in it. Also, make sure you fund you Bundlr account with sufficient AR on the Bundlr node of your choice (default is [node1](https://node1.bundlr.network)).
