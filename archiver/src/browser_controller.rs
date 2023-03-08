@@ -5,9 +5,9 @@ use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
 use rand::Rng;
 use std::fs;
 use std::sync::Arc;
+use std::thread::sleep;
 use std::time::Duration;
 use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
-use tokio::time::sleep;
 
 use crate::utils::{extract_collection_name, get_tmp_screenshot_dir};
 
@@ -36,7 +36,7 @@ pub struct BrowserController {
 }
 
 impl BrowserController {
-    pub async fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let is_docker = std::env::var("IN_DOCKER").is_ok();
         let options = LaunchOptions::default_builder()
             .path(Some(default_executable().unwrap()))
@@ -51,7 +51,7 @@ impl BrowserController {
         Ok(BrowserController { browser })
     }
 
-    pub async fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
+    pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
         // we create a new incognito window (no context)
         let ctx = self
             .browser
@@ -77,7 +77,7 @@ impl BrowserController {
             rng.gen_range(3..6)
         };
         debug!("sleeping for {} seconds", rndm);
-        sleep(Duration::from_secs(rndm)).await;
+        sleep(Duration::from_secs(rndm));
 
         if screenshot {
             let collection_name = extract_collection_name(&url);
@@ -104,12 +104,12 @@ impl BrowserController {
         debug!("scrolling ended");
 
         debug!("sleeping for {} seconds", rndm);
-        sleep(Duration::from_secs(rndm)).await;
+        sleep(Duration::from_secs(rndm));
 
         Ok(tab)
     }
 
-    pub async fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
+    pub fn get_links(&self, tab: &Arc<Tab>) -> Vec<String> {
         let rs = match tab.find_elements("a") {
             Ok(elems) => elems,
             Err(e) => {

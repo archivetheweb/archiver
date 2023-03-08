@@ -1,5 +1,4 @@
 use futures::StreamExt;
-use reqwest::Client;
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -8,7 +7,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{sync::mpsc, time::sleep};
+use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
@@ -25,7 +24,6 @@ pub struct Crawler {
     concurrent_browsers: i32,
     url_retries: i32,
     main_title: Arc<tokio::sync::Mutex<String>>,
-    client: Arc<reqwest::Client>,
 }
 
 impl Crawler {
@@ -45,7 +43,6 @@ impl Crawler {
             concurrent_browsers,
             url_retries,
             main_title: Arc::new(tokio::sync::Mutex::new(String::from(""))),
-            client: Arc::new(reqwest::Client::new()),
         }
     }
 
@@ -187,11 +184,11 @@ impl Crawler {
         });
     }
 
-    async fn fetch_pdf(client: Arc<Client>, url: String) -> anyhow::Result<()> {
-        match client.get(url.as_str()).send().await {
+    fn fetch_pdf(url: String) -> anyhow::Result<()> {
+        match reqwest::blocking::get(url.as_str()) {
             Ok(res) => {
                 debug!("fetching pdf at {}", url.as_str());
-                let _r = res.text().await;
+                let _r = res.text();
                 return Ok(());
             }
             Err(e) => {
@@ -212,7 +209,6 @@ impl Crawler {
         let base_url = self.base_url.clone();
         let start_url = self.url.clone();
         let m = self.main_title.clone();
-        let c = self.client.clone();
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
                 .for_each_concurrent(concurrency as usize, |queued_url| {
@@ -226,29 +222,29 @@ impl Crawler {
                     let base_url = base_url.clone();
                     let is_first_url = start_url == u;
                     let title_mutex = m.clone();
-                    let c = c.clone();
 
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
 
-                        let links = async move {
+                        let links = task::spawn_blocking(move || {
                             // headless chrome can't handle pdfs, so we make a direct request for it
                             if u.as_str().ends_with(".pdf") {
-                                match Self::fetch_pdf(c.clone(), u.clone()).await {
+                                match Self::fetch_pdf(u.clone()) {
                                     Ok(_) => return (vec![], false),
                                     Err(_) => return (vec![], true),
                                 }
                             }
 
-                            let browser = match BrowserController::new().await {
+                            let browser = match BrowserController::new() {
                                 Ok(b) => b,
                                 Err(_) => return (vec![], true),
                             };
 
-                            let tab = browser.browse(u.as_str(), is_first_url).await;
+                            let tab = browser.browse(u.as_str(), is_first_url);
 
                             if tab.is_err() {
-                                let head = c.head(&u).send().await;
+                                let c = reqwest::blocking::Client::new();
+                                let head = c.head(&u).send();
 
                                 if head.is_err() {
                                     warn!(
@@ -269,7 +265,7 @@ impl Crawler {
                                             .unwrap()
                                             .contains("application/pdf")
                                     {
-                                        if Self::fetch_pdf(c.clone(), u.clone()).await.is_ok() {
+                                        if Self::fetch_pdf(u.clone()).is_ok() {
                                             return (vec![], false);
                                         } else {
                                             return (vec![], true);
@@ -284,8 +280,7 @@ impl Crawler {
                                         return (vec![], true);
                                     }
                                 }
-                            };
-
+                            }
                             let tab = tab.unwrap();
                             if is_first_url {
                                 let title = match tab.get_title() {
@@ -295,21 +290,30 @@ impl Crawler {
                                         "".into()
                                     }
                                 };
-                                let mut main_title = title_mutex.lock().await;
+                                let mut main_title = title_mutex.blocking_lock();
                                 *main_title = title;
                             }
 
                             (
                                 browser
                                     .get_links(&tab)
-                                    .await
                                     .iter()
                                     .filter_map(normalize_url_map(base_url.into()))
                                     .collect::<Vec<String>>(),
                                 false,
                             )
-                        }
+                        })
                         .await;
+
+                        let links = match links {
+                            Ok(l) => l,
+                            Err(e) => {
+                                error!("problem spawning a blocking thread {}", e);
+                                ab.fetch_sub(1, Ordering::SeqCst);
+                                failed_url_tx.send((url, depth)).await.unwrap();
+                                return;
+                            }
+                        };
 
                         // the boolean in the second element of the tuple
                         // tells us whether there was an error or not
