@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use reqwest::Client;
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -24,6 +25,7 @@ pub struct Crawler {
     concurrent_browsers: i32,
     url_retries: i32,
     main_title: Arc<tokio::sync::Mutex<String>>,
+    client: Arc<reqwest::Client>,
 }
 
 impl Crawler {
@@ -43,6 +45,7 @@ impl Crawler {
             concurrent_browsers,
             url_retries,
             main_title: Arc::new(tokio::sync::Mutex::new(String::from(""))),
+            client: Arc::new(reqwest::Client::new()),
         }
     }
 
@@ -184,6 +187,20 @@ impl Crawler {
         });
     }
 
+    async fn fetch_pdf(client: Arc<Client>, url: String) -> anyhow::Result<()> {
+        match client.get(url.as_str()).send().await {
+            Ok(res) => {
+                debug!("fetching pdf at {}", url.as_str());
+                let _r = res.text().await;
+                return Ok(());
+            }
+            Err(e) => {
+                warn!("error downloading pdf err: {}", e);
+                return Err(anyhow::anyhow!(e));
+            }
+        }
+    }
+
     fn processor(
         &self,
         scraped_urls_tx: mpsc::Sender<(String, Vec<String>, i32)>,
@@ -195,6 +212,7 @@ impl Crawler {
         let base_url = self.base_url.clone();
         let start_url = self.url.clone();
         let m = self.main_title.clone();
+        let c = self.client.clone();
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
                 .for_each_concurrent(concurrency as usize, |queued_url| {
@@ -208,6 +226,7 @@ impl Crawler {
                     let base_url = base_url.clone();
                     let is_first_url = start_url == u;
                     let title_mutex = m.clone();
+                    let c = c.clone();
 
                     async move {
                         ab.fetch_add(1, Ordering::SeqCst);
@@ -215,17 +234,9 @@ impl Crawler {
                         let links = async move {
                             // headless chrome can't handle pdfs, so we make a direct request for it
                             if u.as_str().ends_with(".pdf") {
-                                match reqwest::blocking::get(u.as_str()) {
-                                    Ok(res) => {
-                                        // make sure we read the text
-                                        debug!("fetching pdf at {}", u.as_str());
-                                        let _r = res.text();
-                                        return (vec![], false);
-                                    }
-                                    Err(e) => {
-                                        warn!("error downloading pdf err: {}", e);
-                                        return (vec![], true);
-                                    }
+                                match Self::fetch_pdf(c.clone(), u.clone()).await {
+                                    Ok(_) => return (vec![], false),
+                                    Err(_) => return (vec![], true),
                                 }
                             }
 
@@ -233,15 +244,49 @@ impl Crawler {
                                 Ok(b) => b,
                                 Err(_) => return (vec![], true),
                             };
-                            let tab = match browser.browse(u.as_str(), is_first_url).await {
-                                Ok(tab) => tab,
-                                Err(e) => {
-                                    warn!("error browsing for {} with err {}", u, e);
+
+                            let tab = browser.browse(u.as_str(), is_first_url).await;
+
+                            if tab.is_err() {
+                                let head = c.head(&u).send().await;
+
+                                if head.is_err() {
+                                    warn!(
+                                        "error browsing for {} with tab err {}, head err {}",
+                                        u,
+                                        tab.err().unwrap(),
+                                        head.err().unwrap()
+                                    );
                                     // we return an empty list of links, and flag as errored out
                                     return (vec![], true);
+                                } else {
+                                    let head = head.unwrap();
+                                    let content_type = head.headers().get("Content-Type");
+                                    if content_type.is_some()
+                                        && content_type
+                                            .unwrap()
+                                            .to_str()
+                                            .unwrap()
+                                            .contains("application/pdf")
+                                    {
+                                        if Self::fetch_pdf(c.clone(), u.clone()).await.is_ok() {
+                                            return (vec![], false);
+                                        } else {
+                                            return (vec![], true);
+                                        }
+                                    } else {
+                                        warn!(
+                                            "error browsing for {} with tab err {}",
+                                            u,
+                                            tab.err().unwrap(),
+                                        );
+                                        // we return an empty list of links, and flag as errored out
+                                        return (vec![], true);
+                                    }
                                 }
                             };
 
+                            let tab = tab.unwrap();
                             if is_first_url {
                                 let title = match tab.get_title() {
                                     Ok(t) => t,
