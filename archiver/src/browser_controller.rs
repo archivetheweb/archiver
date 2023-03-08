@@ -74,7 +74,7 @@ impl BrowserController {
 
         let rndm = {
             let mut rng = rand::thread_rng();
-            rng.gen_range(3..6)
+            rng.gen_range(5..7)
         };
         debug!("sleeping for {} seconds", rndm);
         sleep(Duration::from_secs(rndm));
