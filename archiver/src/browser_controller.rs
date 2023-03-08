@@ -101,6 +101,7 @@ impl BrowserController {
                 tab.evaluate(&get_scroll_script(30), true)?;
             }
         };
+        debug!("scrolling ended");
 
         debug!("sleeping for {} seconds", rndm);
         sleep(Duration::from_secs(rndm)).await;
