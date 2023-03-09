@@ -39,6 +39,7 @@ pub struct ArchivingResult {
     pub screenshot_file: PathBuf,
     pub archive_info: ArchiveInfo,
     pub title: String,
+    pub original_url: String,
 }
 
 #[derive(Serialize, Deserialize)]

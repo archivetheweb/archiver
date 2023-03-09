@@ -18,7 +18,7 @@ use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    types::{ArchiveInfo, ArchivingResult, BundlrUploadID, CrawlUploadResult},
+    types::{ArchivingResult, BundlrUploadID, CrawlUploadResult},
     utils::{assert_stream_send, jitter, APP_NAME, APP_VERSION, BUNDLR_URL, WARC_APPLICATION_TYPE},
 };
 
@@ -61,19 +61,19 @@ impl Uploader {
 
     pub async fn upload_crawl_files(
         &self,
-        crawl: &ArchivingResult,
+        archiving_result: &ArchivingResult,
     ) -> anyhow::Result<CrawlUploadResult> {
         let mut warc_file_ids = vec![];
         // TODO make these recursive bundles
 
         // first we do the warc files
-        for file_path in &crawl.warc_files {
-            let file_tx_id = self.upload_warc(file_path, &crawl.archive_info).await?;
+        for file_path in &archiving_result.warc_files {
+            let file_tx_id = self.upload_warc(file_path, &archiving_result).await?;
             warc_file_ids.push(file_tx_id);
         }
         // then the screenshot
         let screenshot_id = self
-            .upload_screenshot(&crawl.screenshot_file, &crawl.archive_info)
+            .upload_screenshot(&archiving_result.screenshot_file, &archiving_result)
             .await?;
 
         Ok(CrawlUploadResult {
@@ -85,7 +85,7 @@ impl Uploader {
     pub async fn upload_warc(
         &self,
         file_path: &PathBuf,
-        archive_info: &ArchiveInfo,
+        archive_info: &ArchivingResult,
     ) -> anyhow::Result<String> {
         let data = fs::read(&file_path).await.context(format!(
             "upload_warc: could not read file at path {:?}",
@@ -94,9 +94,10 @@ impl Uploader {
 
         let mut tags = Self::append_app_tags(
             vec![],
-            &archive_info.url(),
-            archive_info.unix_ts(),
-            archive_info.depth(),
+            &archive_info.archive_info.url(),
+            &archive_info.original_url,
+            archive_info.archive_info.unix_ts(),
+            archive_info.archive_info.depth(),
         );
         tags.push(Tag::<String>::from_utf8_strs("Content-Encoding", "gzip").unwrap());
 
@@ -109,7 +110,7 @@ impl Uploader {
     pub async fn upload_screenshot<'a>(
         &self,
         file_path: &PathBuf,
-        archive_info: &ArchiveInfo,
+        archive_info: &ArchivingResult,
     ) -> anyhow::Result<String> {
         let screenshot_data = fs::read(&file_path).await.context(format!(
             "could not read screenshot_data at {:?}",
@@ -122,9 +123,10 @@ impl Uploader {
                 screenshot_data,
                 Self::append_app_tags(
                     vec![],
-                    &archive_info.url(),
-                    archive_info.unix_ts(),
-                    archive_info.depth(),
+                    &archive_info.archive_info.url(),
+                    &archive_info.original_url,
+                    archive_info.archive_info.unix_ts(),
+                    archive_info.archive_info.depth(),
                 ),
             )
             .await?;
@@ -266,6 +268,7 @@ impl Uploader {
     fn append_app_tags(
         mut tags: Vec<Tag<String>>,
         url: &str,
+        original_url: &str,
         timestamp: i64,
         depth: u8,
     ) -> Vec<Tag<String>> {
@@ -274,6 +277,7 @@ impl Uploader {
             Tag::<String>::from_utf8_strs("App-Name", &APP_NAME).unwrap(),
             Tag::<String>::from_utf8_strs("App-Version", &APP_VERSION).unwrap(),
             Tag::<String>::from_utf8_strs("Url", url.into()).unwrap(),
+            Tag::<String>::from_utf8_strs("Original-Url", original_url.into()).unwrap(),
             Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
             Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
             Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),

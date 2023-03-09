@@ -135,12 +135,12 @@ impl Runner {
         Ok((base_url, full_url, domain.into()))
     }
 
-    pub async fn run_archiving(&self, url: &str) -> anyhow::Result<ArchivingResult> {
-        let (base_url, full_url, domain) = self.prepare_urls(url)?;
+    pub async fn run_archiving(&self, original_url: &str) -> anyhow::Result<ArchivingResult> {
+        let (base_url, full_url, domain) = self.prepare_urls(original_url)?;
 
         info!(
             "Initializing crawl of {} with depth {}, {} browsers, {} retries.",
-            url,
+            original_url,
             self.options.crawl_depth,
             self.options.concurrent_browsers,
             self.options.url_retries
@@ -172,6 +172,7 @@ impl Runner {
             screenshot_file: screenshot_dir,
             archive_info: archive_info,
             title: crawl.main_title,
+            original_url: original_url.into(),
         })
     }
 
