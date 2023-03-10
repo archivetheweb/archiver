@@ -283,7 +283,7 @@ impl Uploader {
             Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
             Tag::<String>::from_utf8_strs(
                 "Render-With",
-                "m2s7Wam0E6PGuKcLHRkFQXo9ou4ASsEtdutlFKqbge8",
+                "zngmvfYcOirURW6UKvuP7bmwCYukpZMbh90osAtYN3g",
             )
             .unwrap(),
         ];
