@@ -281,6 +281,11 @@ impl Uploader {
             Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
             Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
             Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
+            Tag::<String>::from_utf8_strs(
+                "Render-With",
+                "m2s7Wam0E6PGuKcLHRkFQXo9ou4ASsEtdutlFKqbge8",
+            )
+            .unwrap(),
         ];
         tags.append(&mut t);
         return tags;
