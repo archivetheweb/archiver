@@ -1,4 +1,5 @@
 use std::{
+    ops::Div,
     path::PathBuf,
     str::FromStr,
     sync::{atomic::AtomicBool, Arc},
@@ -6,29 +7,74 @@ use std::{
 
 use anyhow::{anyhow, Context};
 use archiver::{
-    archiver::Archiver,
+    archiver::{Archiver, ArchiverOptionsBuilder},
     contract::Contract,
     types::BundlrBalance,
     utils::{BUNDLR_URL, CONTRACT_ADDRESS},
 };
 use arloader::Arweave;
+use clap::Parser;
 use log::debug;
 use reqwest::Url;
 use signal_hook::consts::{SIGINT, SIGTERM};
 
+#[derive(Parser, Debug, Clone)]
+#[command(author, version, about = "Archive The Web Uploader CLI", long_about = None)]
+struct Args {
+    /// Total number of concurrent crawls
+    #[arg(short = 'c', long, default_value_t = 3)]
+    concurrent_crawlers: u8,
+    /// Total number of concurrent tabs open within a crawl
+    #[arg(short = 't', long, default_value_t = 10)]
+    concurrent_tabs: u8,
+    /// Number of retries per failed URL
+    #[arg(short = 'r', long, default_value_t = 2)]
+    retries: u8,
+    /// Whether to upload the crawls or not
+    #[arg(short = 'u', long, default_value_t = true)]
+    with_upload: bool,
+    /// Minimum time in seconds to wait after a tab navigates to a page
+    #[arg(long, default_value_t = 5)]
+    min_wait_after_navigation: u8,
+    /// Maximum time in seconds to wait after a tab navigates to a page
+    #[arg(long, default_value_t = 7)]
+    max_wait_after_navigation: u8,
+    /// Maximum time in seconds to wait after a tab navigates to a page
+    #[arg(short = 'd', long)]
+    writer_directory: Option<PathBuf>,
+    /// Frequency of fetching for new archive requests in seconds
+    #[arg(short = 'f', long, default_value_t = 30)]
+    fetching_frequency: u8,
+    /// Maximum time in seconds to wait after a tab navigates to a page
+    #[arg(short = 'b', long)]
+    balance: bool,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
-    debug!("{}", "In debug mode");
 
-    let should_terminate = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
-    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
+    let args = Args::parse();
+
+    match std::env::var("RUST_LOG") {
+        Ok(env) => {
+            if env == "debug" {
+                println!("{number:/>width$}", number = "", width = 20);
+                println!("{}", "Debug mode enabled");
+                println!("{number:/>width$}", number = "", width = 20);
+                println!();
+            }
+        }
+        _ => {}
+    }
+
     let path = PathBuf::from(".secret/wallet.json");
-    let p = path.clone();
-    let arweave = Arweave::from_keypair_path(path, Url::from_str("https://arweave.net")?)
+    let arweave = Arweave::from_keypair_path(path.clone(), Url::from_str("https://arweave.net")?)
         .await
-        .context(format!("could not open arweave wallet from path {:?}", p))?;
+        .context(format!(
+            "could not open arweave wallet from path {:?}",
+            path
+        ))?;
 
     let wallet_address = arweave.crypto.wallet_address()?.to_string();
 
@@ -49,6 +95,21 @@ async fn main() -> anyhow::Result<()> {
     if res.balance == "0" {
         return Err(anyhow!("no funds in bundlr address {} ", &wallet_address));
     }
+    if args.balance {
+        let b = match res.balance.parse::<f64>() {
+            Ok(num) => num,
+            Err(e) => panic!("Couldn't parse balance {}", e),
+        };
+
+        println!(
+            "balance: {} winston or {:.12} AR for address {}",
+            res.balance,
+            b.div(1000000000000.0),
+            &wallet_address,
+        );
+        return Ok(());
+    }
+
     let environment = "mainnet";
     let contract = Contract::new(&CONTRACT_ADDRESS, environment, arweave).context(format!(
         "could not initiate contract with address {} on env {}",
@@ -63,10 +124,28 @@ async fn main() -> anyhow::Result<()> {
 
     // we ensure we are an uploader
     if !uploaders.contains_key(&wallet_address) {
-        return Err(anyhow!("Not registered as an uploader"));
+        return Err(anyhow!(
+            "{} is not registered as an uploader",
+            wallet_address
+        ));
     }
 
-    let mut archiver = Archiver::new(3);
+    debug!("Starting Uploader with {:#?}", args.clone());
+
+    let archive_options = ArchiverOptionsBuilder::default_builder()
+        .writer_dir(args.writer_directory)
+        .concurrent_crawlers(args.concurrent_crawlers)
+        .concurrent_tabs(args.concurrent_tabs)
+        .fetch_frequency(args.fetching_frequency)
+        .url_retries(args.retries)
+        .with_upload(args.with_upload)
+        .build()?;
+
+    let mut archiver = Archiver::new(archive_options);
+
+    let should_terminate = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))?;
+    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))?;
 
     archiver
         .archive(Arc::new(contract), wallet_address, should_terminate)

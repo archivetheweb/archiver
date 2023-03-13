@@ -38,7 +38,7 @@ pub struct LaunchOptions {
     #[builder(default = "1")]
     crawl_depth: i32,
     #[builder(default = "5")]
-    concurrent_browsers: i32,
+    concurrent_tabs: i32,
     #[builder(default = "2")]
     url_retries: i32,
     #[builder(default = "self.default_base_url()")]
@@ -142,14 +142,14 @@ impl Runner {
             "Initializing crawl of {} with depth {}, {} browsers, {} retries.",
             original_url,
             self.options.crawl_depth,
-            self.options.concurrent_browsers,
+            self.options.concurrent_tabs,
             self.options.url_retries
         );
         let mut crawler = Crawler::new(
             &base_url,
             &full_url,
             self.options.crawl_depth,
-            self.options.concurrent_browsers,
+            self.options.concurrent_tabs,
             self.options.url_retries,
         );
         let crawl = crawler.crawl(self.should_terminate.clone()).await?;

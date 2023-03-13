@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     fs,
+    path::PathBuf,
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -25,14 +26,42 @@ use tokio::{sync::mpsc, sync::mpsc::Sender, time::sleep};
 
 pub struct Archiver {
     processing: HashSet<String>,
-    concurrent_workers: i32,
+    options: ArchiverOptions,
+}
+
+#[derive(Builder, Debug, Clone)]
+#[builder(setter(into))]
+pub struct ArchiverOptions {
+    #[builder(default = "self.default_writer_dir()")]
+    writer_dir: Option<PathBuf>,
+    #[builder(default = "3")]
+    concurrent_crawlers: i32,
+    #[builder(default = "10")]
+    concurrent_tabs: i32,
+    #[builder(default = "30")]
+    fetch_frequency: u64,
+    #[builder(default = "2")]
+    url_retries: i32,
+    with_upload: bool,
+}
+
+impl ArchiverOptionsBuilder {
+    pub fn default_builder() -> ArchiverOptionsBuilder {
+        ArchiverOptionsBuilder::default()
+    }
+}
+
+impl ArchiverOptionsBuilder {
+    fn default_writer_dir(&self) -> Option<PathBuf> {
+        Some(PathBuf::from(format!("")))
+    }
 }
 
 impl Archiver {
-    pub fn new(concurrent_workers: i32) -> Self {
+    pub fn new(options: ArchiverOptions) -> Self {
         Archiver {
             processing: HashSet::new(),
-            concurrent_workers: concurrent_workers,
+            options,
         }
     }
     pub async fn archive(
@@ -48,6 +77,7 @@ impl Archiver {
         let ct = contract.clone();
         let wa = wallet_address.clone();
         let st = should_terminate.clone();
+        let timeout = self.options.fetch_frequency;
 
         // create a thread where we fetch new work
         tokio::spawn(async move {
@@ -64,17 +94,17 @@ impl Archiver {
                 .await
                 {
                     Ok(_) => {
-                        debug!("new work fetched");
+                        debug!("new work successfully fetched");
                     }
                     Err(e) => {
-                        error!("error fetching new work {}", e)
+                        error!("could not fetch new work {}", e)
                     }
                 };
                 if should_terminate.load(Ordering::Relaxed) {
                     return;
                 }
-                let timeout = 30;
-                debug!("sleeping for {} seconds", timeout);
+
+                debug!("waiting {} seconds to fetch new work", timeout);
                 sleep(Duration::from_secs(timeout)).await;
             }
         });
@@ -128,23 +158,25 @@ impl Archiver {
         archiver_rx: mpsc::Receiver<ArchiveRequest>,
         processed_archiver_tx: mpsc::Sender<ArchiveRequest>,
     ) {
-        let concurrency = self.concurrent_workers.clone();
-
+        let concurrency = self.options.concurrent_crawlers.clone();
+        let options = self.options.clone();
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(archiver_rx)
-                .for_each_concurrent(concurrency as usize, |req| {
+                .for_each_concurrent(concurrency as usize, |archive_request| {
                     let should_terminate = should_terminate.clone();
                     let c = contract.clone();
                     let w = wallet_address.clone();
                     let tx = processed_archiver_tx.clone();
+                    let options = options.clone();
                     async move {
-                        let id = req.id.clone();
-                        debug!("Archive running for req {:#?}", req);
-                        let res = Self::run(c, w, &req, should_terminate).await;
+                        let id = archive_request.id.clone();
+                        debug!("archive running for request {:#?}", archive_request);
+                        let res =
+                            Self::run(c, w, &archive_request, options, should_terminate).await;
                         debug!("{:?}", res);
                         match res {
                             Ok(_) => {
-                                match tx.send(req).await {
+                                match tx.send(archive_request).await {
                                     Ok(_) => {}
                                     Err(e) => {
                                         error!("Could not send archive processed {:?}", e)
@@ -251,18 +283,20 @@ impl Archiver {
     async fn run(
         contract: Arc<Contract>,
         wallet_address: String,
-        req: &ArchiveRequest,
+        archive_request: &ArchiveRequest,
+        options: ArchiverOptions,
         should_terminate: Arc<AtomicBool>,
     ) -> anyhow::Result<()> {
         let options = LaunchOptions::default_builder()
-            .with_upload(true)
-            .writer_dir(Some("/tmp/".into()))
+            .writer_dir(options.writer_dir)
+            .concurrent_tabs(options.concurrent_tabs)
+            .url_retries(options.url_retries)
+            .with_upload(options.with_upload)
             .writer_port(None)
             .writer_debug(false)
             .archive_name(None)
-            .crawl_depth(req.options.depth)
+            .crawl_depth(archive_request.options.depth)
             // .domain_only(req.options.domain_only)
-            .concurrent_browsers(10)
             .build()?;
 
         debug!("Launching crawler with options: \n {:#?}", options);
@@ -275,7 +309,7 @@ impl Archiver {
             return Err(ArchiverError::EarlyTermination.into());
         }
 
-        let url = &req.options.urls[0];
+        let url = &archive_request.options.urls[0];
 
         let result = r.run_archiving(url).await?;
         let title = result.title.clone();
@@ -307,12 +341,12 @@ impl Archiver {
             full_url: url.into(),
             size: size as usize,
             uploader_address: wallet_address.clone(),
-            archive_request_id: req.id.clone(),
+            archive_request_id: archive_request.id.clone(),
             timestamp: ts,
             arweave_tx: upload_result.warc_id[0].clone(),
             options: ArchiveOptions {
-                depth: req.options.depth,
-                domain_only: req.options.domain_only,
+                depth: archive_request.options.depth,
+                domain_only: archive_request.options.domain_only,
             },
             screenshot_tx: upload_result.screenshot_id,
             title: title,

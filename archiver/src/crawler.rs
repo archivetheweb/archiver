@@ -21,7 +21,7 @@ pub struct Crawler {
     depth: i32,
     base_url: String,
     url: String,
-    concurrent_browsers: i32,
+    concurrent_tabs: i32,
     url_retries: i32,
     main_title: Arc<tokio::sync::Mutex<String>>,
 }
@@ -31,7 +31,7 @@ impl Crawler {
         base_url: &str,
         url: &str,
         depth: i32,
-        concurrent_browsers: i32,
+        concurrent_tabs: i32,
         url_retries: i32,
     ) -> Crawler {
         Crawler {
@@ -40,7 +40,7 @@ impl Crawler {
             base_url: base_url.into(),
             depth,
             url: url.into(),
-            concurrent_browsers,
+            concurrent_tabs,
             url_retries,
             main_title: Arc::new(tokio::sync::Mutex::new(String::from(""))),
         }
@@ -54,7 +54,7 @@ impl Crawler {
         // this channel will send an (String, Vec<String>,i32) tuple
         // first element being the url visited, next element being all the new urls and last being the depth of the visited_url
         let (scraped_urls_tx, mut scraped_urls_rx) =
-            mpsc::channel::<(String, Vec<String>, i32)>(self.concurrent_browsers as usize + 10);
+            mpsc::channel::<(String, Vec<String>, i32)>(self.concurrent_tabs as usize + 10);
 
         let (visit_url_tx, visit_url_rx) = mpsc::channel::<(String, i32)>(1000);
         let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(String, i32)>(1000);
@@ -205,7 +205,7 @@ impl Crawler {
         failed_url_tx: mpsc::Sender<(String, i32)>,
         active_browsers: Arc<AtomicUsize>,
     ) {
-        let concurrency = self.concurrent_browsers;
+        let concurrency = self.concurrent_tabs;
         let base_url = self.base_url.clone();
         let start_url = self.url.clone();
         let m = self.main_title.clone();
