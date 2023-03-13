@@ -35,10 +35,13 @@ struct Args {
     with_upload: bool,
     /// Minimum time in seconds to wait after a tab navigates to a page
     #[arg(long, default_value_t = 5)]
-    min_wait_after_navigation: u8,
+    min_wait_after_navigation: u64,
     /// Maximum time in seconds to wait after a tab navigates to a page
     #[arg(long, default_value_t = 7)]
-    max_wait_after_navigation: u8,
+    max_wait_after_navigation: u64,
+    /// Maximum time the browser will wait for an event before timing out
+    #[arg(long, default_value_t = 45)]
+    browser_timeout: u64,
     /// Maximum time in seconds to wait after a tab navigates to a page
     #[arg(short = 'd', long)]
     writer_directory: Option<PathBuf>,
@@ -139,6 +142,9 @@ async fn main() -> anyhow::Result<()> {
         .fetch_frequency(args.fetching_frequency)
         .url_retries(args.retries)
         .with_upload(args.with_upload)
+        .browser_timeout(args.browser_timeout)
+        .min_wait_after_navigation(args.min_wait_after_navigation)
+        .max_wait_after_navigation(args.max_wait_after_navigation)
         .build()?;
 
     let mut archiver = Archiver::new(archive_options);

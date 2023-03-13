@@ -43,6 +43,12 @@ pub struct ArchiverOptions {
     #[builder(default = "2")]
     url_retries: i32,
     with_upload: bool,
+    #[builder(default = "5")]
+    min_wait_after_navigation: u64,
+    #[builder(default = "7")]
+    max_wait_after_navigation: u64,
+    #[builder(default = "45")]
+    browser_timeout: u64,
 }
 
 impl ArchiverOptionsBuilder {
@@ -296,6 +302,9 @@ impl Archiver {
             .writer_debug(false)
             .archive_name(None)
             .crawl_depth(archive_request.options.depth)
+            .timeout(options.browser_timeout)
+            .min_wait_after_navigation(options.min_wait_after_navigation)
+            .max_wait_after_navigation(options.max_wait_after_navigation)
             // .domain_only(req.options.domain_only)
             .build()?;
 

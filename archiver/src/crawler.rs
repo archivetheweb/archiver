@@ -24,6 +24,9 @@ pub struct Crawler {
     concurrent_tabs: i32,
     url_retries: i32,
     main_title: Arc<tokio::sync::Mutex<String>>,
+    timeout: u64,
+    min_wait_secs: u64,
+    max_wait_secs: u64,
 }
 
 impl Crawler {
@@ -33,6 +36,9 @@ impl Crawler {
         depth: i32,
         concurrent_tabs: i32,
         url_retries: i32,
+        timeout: u64,
+        min_wait_secs: u64,
+        max_wait_secs: u64,
     ) -> Crawler {
         Crawler {
             visited: HashSet::new(),
@@ -43,6 +49,9 @@ impl Crawler {
             concurrent_tabs,
             url_retries,
             main_title: Arc::new(tokio::sync::Mutex::new(String::from(""))),
+            timeout,
+            min_wait_secs,
+            max_wait_secs,
         }
     }
 
@@ -209,6 +218,9 @@ impl Crawler {
         let base_url = self.base_url.clone();
         let start_url = self.url.clone();
         let m = self.main_title.clone();
+        let min_wait = self.min_wait_secs;
+        let max_wait = self.max_wait_secs;
+        let timeout = self.timeout;
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
                 .for_each_concurrent(concurrency as usize, |queued_url| {
@@ -235,7 +247,8 @@ impl Crawler {
                                 }
                             }
 
-                            let browser = match BrowserController::new() {
+                            let browser = match BrowserController::new(timeout, min_wait, max_wait)
+                            {
                                 Ok(b) => b,
                                 Err(_) => return (vec![], true),
                             };

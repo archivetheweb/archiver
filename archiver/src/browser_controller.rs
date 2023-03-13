@@ -33,22 +33,28 @@ fn get_scroll_script(timeout_ms: i128) -> String {
 
 pub struct BrowserController {
     browser: Browser,
+    min_wait_secs: u64,
+    max_wait_secs: u64,
 }
 
 impl BrowserController {
-    pub fn new() -> Result<Self> {
+    pub fn new(idle_browser_timeout: u64, min_wait_secs: u64, max_wait_secs: u64) -> Result<Self> {
         let is_docker = std::env::var("IN_DOCKER").is_ok();
         let options = LaunchOptions::default_builder()
             .path(Some(default_executable().unwrap()))
             .window_size(Some((1920, 1080)))
-            .idle_browser_timeout(Duration::from_secs(45))
+            .idle_browser_timeout(Duration::from_secs(idle_browser_timeout))
             // warning only do this if in docker env
             .sandbox(!is_docker)
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
         let browser = Browser::new(options).context("browser launching error")?;
 
-        Ok(BrowserController { browser })
+        Ok(BrowserController {
+            browser,
+            min_wait_secs,
+            max_wait_secs,
+        })
     }
 
     pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
@@ -74,9 +80,9 @@ impl BrowserController {
 
         let rndm = {
             let mut rng = rand::thread_rng();
-            rng.gen_range(5..7)
+            rng.gen_range(self.min_wait_secs..self.max_wait_secs)
         };
-        debug!("sleeping for {} seconds", rndm);
+        debug!("successfully navigated, sleeping for {} seconds", rndm);
         sleep(Duration::from_secs(rndm));
 
         if screenshot {
@@ -101,9 +107,7 @@ impl BrowserController {
                 tab.evaluate(&get_scroll_script(30), true)?;
             }
         };
-        debug!("scrolling ended");
-
-        debug!("sleeping for {} seconds", rndm);
+        debug!("successfully scrolled, sleeping for {} seconds", rndm);
         sleep(Duration::from_secs(rndm));
 
         Ok(tab)

@@ -41,6 +41,15 @@ pub struct LaunchOptions {
     concurrent_tabs: i32,
     #[builder(default = "2")]
     url_retries: i32,
+    // in seconds
+    #[builder(default = "5")]
+    min_wait_after_navigation: u64,
+    // in seconds
+    #[builder(default = "7")]
+    max_wait_after_navigation: u64,
+    // in seconds
+    #[builder(default = "45")]
+    timeout: u64,
     #[builder(default = "self.default_base_url()")]
     base_url: String,
     #[builder(default = "self.default_archive_name()")]
@@ -151,6 +160,9 @@ impl Runner {
             self.options.crawl_depth,
             self.options.concurrent_tabs,
             self.options.url_retries,
+            self.options.timeout,
+            self.options.min_wait_after_navigation,
+            self.options.max_wait_after_navigation,
         );
         let crawl = crawler.crawl(self.should_terminate.clone()).await?;
 
