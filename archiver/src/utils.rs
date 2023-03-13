@@ -55,17 +55,26 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
     let new_url = Url::parse(url.as_str());
     match new_url {
         Ok(mut new_url) => {
+            let scheme = new_url.scheme();
+            if scheme != "https" && scheme != "http" {
+                return None;
+            }
+
             // we remove the fragments (#)
             new_url.set_fragment(None);
             Some(new_url.to_string())
         }
         Err(_e) => {
             if url.starts_with('/') {
-                let mut u = Url::parse(format!("{}{}", base_url, url).as_str()).unwrap();
+                let mut u = match Url::parse(format!("{}{}", base_url, url).as_str()) {
+                    Ok(u) => u,
+                    Err(_) => return None,
+                };
+
                 u.set_fragment(None);
                 Some(u.to_string())
             } else {
-                None
+                return None;
             }
         }
     }
@@ -119,29 +128,43 @@ pub fn create_random_tmp_folder() -> anyhow::Result<PathBuf> {
 mod test {
     use super::*;
     #[test]
-    fn remove_path_fragments() {
-        let s = "https://example.com#hello".to_string();
-        assert_eq!(
-            normalize_url_map("https://example.com".to_string())(&s)
-                .unwrap()
-                .to_string(),
-            "https://example.com/"
-        );
+    fn test_normalize() {
+        struct Test {
+            expected: Option<String>,
+            value: String,
+        }
+        let tests = vec![
+            Test {
+                value: "https://example.com#hello".into(),
+                expected: Some("https://example.com/".into()),
+            },
+            Test {
+                value: "http://example.com".into(),
+                expected: Some("http://example.com/".into()),
+            },
+            Test {
+                value: "/hello#test".into(),
+                expected: Some("https://example.com/hello".into()),
+            },
+            Test {
+                value: "javascript:print();".into(),
+                expected: None,
+            },
+            Test {
+                value: "mailto:ex@ex.org".into(),
+                expected: None,
+            },
+            Test {
+                value: "fb-messenger://share?link=https%3A%2F%2Fwww.theguardian.com".into(),
+                expected: None,
+            },
+        ];
 
-        let s1 = "/hello#test".to_string();
-        assert_eq!(
-            normalize_url_map("https://example.com".to_string())(&s1)
-                .unwrap()
-                .to_string(),
-            "https://example.com/hello"
-        );
-    }
+        let n = normalize_url_map("https://example.com".to_string());
 
-    #[test]
-    fn url() {
-        let s = Url::parse("https://archivetheweb.com").unwrap();
-
-        assert_eq!(s.to_string(), "https://archivetheweb.com/");
+        for test in tests {
+            assert_eq!(n(&test.value), test.expected);
+        }
     }
 
     #[test]
@@ -154,7 +177,6 @@ mod test {
 
     #[test]
     fn creates_a_random_folder() {
-        // let path = ""
         let p = create_random_tmp_folder().unwrap();
         assert!(p.exists());
         fs::remove_dir(p).unwrap();
