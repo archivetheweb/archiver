@@ -93,7 +93,7 @@ impl Uploader {
         ))?;
 
         let mut tags = Self::append_app_tags(
-            vec![],
+            vec![Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap()],
             &archive_info.archive_info.url(),
             &archive_info.original_url,
             archive_info.archive_info.unix_ts(),
@@ -122,7 +122,7 @@ impl Uploader {
             .upload_to_bundlr(
                 screenshot_data,
                 Self::append_app_tags(
-                    vec![],
+                    vec![Tag::<String>::from_utf8_strs("Content-Type", "image/png").unwrap()],
                     &archive_info.archive_info.url(),
                     &archive_info.original_url,
                     archive_info.archive_info.unix_ts(),
@@ -280,7 +280,6 @@ impl Uploader {
             Tag::<String>::from_utf8_strs("Original-Url", original_url.into()).unwrap(),
             Tag::<String>::from_utf8_strs("Timestamp", &format!("{}", timestamp)).unwrap(),
             Tag::<String>::from_utf8_strs("Crawl-Depth", &format!("{}", depth)).unwrap(),
-            Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
             Tag::<String>::from_utf8_strs(
                 "Render-With",
                 "sINecUuZrGuVGnFMA4J1eiW_G8GbXzq68SvbFnKMya0",
