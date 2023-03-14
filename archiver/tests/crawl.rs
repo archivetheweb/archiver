@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use archiver::runner::{LaunchOptions, Runner};
+use archiver::runner::{Runner, RunnerOptions};
 
 macro_rules! aw {
     ($e:expr) => {
@@ -13,7 +13,7 @@ macro_rules! aw {
 #[ignore = "crawl"]
 fn crawl_website() -> anyhow::Result<()> {
     env_logger::init();
-    let options = LaunchOptions::default_builder()
+    let options = RunnerOptions::default_builder()
         .writer_dir(Some(PathBuf::from(".")))
         .concurrent_tabs(10)
         .url_retries(2)

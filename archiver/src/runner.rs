@@ -22,53 +22,62 @@ use crate::{
 pub struct Runner {
     uploader: Option<Uploader>,
     warc_writer: WarcWriter,
-    options: LaunchOptions,
+    options: RunnerOptions,
     should_terminate: Arc<AtomicBool>,
 }
 
 #[derive(Builder, Debug)]
 #[builder(setter(into))]
-pub struct LaunchOptions {
+pub struct RunnerOptions {
     #[builder(default = "Some(8080)")]
+    // port for the warc_writer
     writer_port: Option<u16>,
+    // directory where the warc files will be written to
     #[builder(default = "self.default_writer_dir()")]
     writer_dir: Option<PathBuf>,
+    // writer toggle for debug mode
     #[builder(default = "false")]
     writer_debug: bool,
+    // depth of crawl (0=page only, 1=page+links, 2=page+links+links in linked pages)
     #[builder(default = "1")]
     crawl_depth: i32,
     #[builder(default = "5")]
     concurrent_tabs: i32,
     #[builder(default = "2")]
     url_retries: i32,
-    // in seconds
+    // minimum wait time after navigation in seconds
     #[builder(default = "5")]
     min_wait_after_navigation: u64,
-    // in seconds
+    // maximum wait time after navigation in seconds
     #[builder(default = "7")]
     max_wait_after_navigation: u64,
-    // in seconds
+    // browser timeout in seconds
     #[builder(default = "45")]
     timeout: u64,
+    // base url where the warc writer can be accessed
     #[builder(default = "self.default_base_url()")]
     base_url: String,
+    // optional setting to change the archive name
     #[builder(default = "self.default_archive_name()")]
     archive_name: Option<String>,
+    // toggle if we want to upload the finished warc files to arweave
     #[builder(default = "false")]
     with_upload: bool,
+    // path to the arweave keyfile
     #[builder(default = "self.default_arweave_wallet_dir()")]
     arweave_key_dir: PathBuf,
+    // currency to pay out for the bundlr service
     #[builder(default = "self.default_currency()")]
     currency: String,
 }
 
-impl LaunchOptions {
-    pub fn default_builder() -> LaunchOptionsBuilder {
-        LaunchOptionsBuilder::default()
+impl RunnerOptions {
+    pub fn default_builder() -> RunnerOptionsBuilder {
+        RunnerOptionsBuilder::default()
     }
 }
 
-impl LaunchOptionsBuilder {
+impl RunnerOptionsBuilder {
     fn default_archive_name(&self) -> Option<String> {
         Some(String::from("archiver"))
     }
@@ -87,7 +96,7 @@ impl LaunchOptionsBuilder {
 }
 
 impl Runner {
-    pub async fn new(lo: LaunchOptions) -> anyhow::Result<Self> {
+    pub async fn new(lo: RunnerOptions) -> anyhow::Result<Self> {
         let warc_writer = WarcWriter::new(
             lo.writer_port,
             lo.writer_dir.clone(),
@@ -148,7 +157,7 @@ impl Runner {
         let (base_url, full_url, domain) = self.prepare_urls(original_url)?;
 
         info!(
-            "Initializing crawl of {} with depth {}, {} browsers, {} retries.",
+            "initializing crawl of {} with depth {}, {} browsers, {} retries.",
             original_url,
             self.options.crawl_depth,
             self.options.concurrent_tabs,
@@ -193,7 +202,7 @@ impl Runner {
         crawl: ArchivingResult,
     ) -> anyhow::Result<CrawlUploadResult> {
         if !self.options.with_upload {
-            return Err(anyhow!("no upload option turned on"));
+            return Err(anyhow!("with_upload is false"));
         }
 
         match &self.uploader {
@@ -209,8 +218,8 @@ impl Runner {
 
 impl Drop for Runner {
     fn drop(&mut self) {
-        debug!("{}", "Terminating runner...");
+        debug!("{}", "terminating runner...");
         self.warc_writer.terminate().unwrap();
-        debug!("{}", "Child process killed, goodbye");
+        debug!("{}", "warc_writer child process killed, goodbye");
     }
 }

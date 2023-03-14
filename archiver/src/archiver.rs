@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     contract::Contract,
-    runner::{LaunchOptions, Runner},
+    runner::{Runner, RunnerOptions},
     types::ArchiverError,
     utils::get_unix_timestamp,
 };
@@ -288,7 +288,7 @@ impl Archiver {
         options: ArchiverOptions,
         should_terminate: Arc<AtomicBool>,
     ) -> anyhow::Result<()> {
-        let options = LaunchOptions::default_builder()
+        let options = RunnerOptions::default_builder()
             .writer_dir(options.writer_dir)
             .concurrent_tabs(options.concurrent_tabs)
             .url_retries(options.url_retries)
