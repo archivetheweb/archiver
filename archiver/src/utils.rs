@@ -12,6 +12,7 @@ pub const BASE_URL: &str = "http://localhost";
 pub const WARC_APPLICATION_TYPE: &str = "application/warc";
 pub const FORMAT_STRING: &str = "%Y%m%d%H%M%S";
 pub const BUNDLR_URL: &str = "https://node1.bundlr.network";
+pub const CHUNKING_THRESHOLD: usize = 50_000_000;
 
 lazy_static! {
     pub static ref CONTRACT_ADDRESS: String = {

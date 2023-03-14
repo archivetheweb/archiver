@@ -19,7 +19,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     types::{ArchivingResult, BundlrUploadID, CrawlUploadResult},
-    utils::{assert_stream_send, jitter, APP_NAME, APP_VERSION, BUNDLR_URL, WARC_APPLICATION_TYPE},
+    utils::{
+        assert_stream_send, jitter, APP_NAME, APP_VERSION, BUNDLR_URL, CHUNKING_THRESHOLD,
+        WARC_APPLICATION_TYPE,
+    },
 };
 
 pub struct Uploader {
@@ -37,7 +40,7 @@ struct BundlrRes {
 impl Uploader {
     pub async fn new(key_path: PathBuf, currency: &str) -> anyhow::Result<Self> {
         if currency != "arweave" {
-            return Err(anyhow!("arweave is the only supported currency"));
+            return Err(anyhow!("arweave currently the only supported currency"));
         }
 
         if !key_path.exists() {
@@ -66,12 +69,10 @@ impl Uploader {
         let mut warc_file_ids = vec![];
         // TODO make these recursive bundles
 
-        // first we do the warc files
         for file_path in &archiving_result.warc_files {
             let file_tx_id = self.upload_warc(file_path, &archiving_result).await?;
             warc_file_ids.push(file_tx_id);
         }
-        // then the screenshot
         let screenshot_id = self
             .upload_screenshot(&archiving_result.screenshot_file, &archiving_result)
             .await?;
@@ -92,16 +93,17 @@ impl Uploader {
             &file_path
         ))?;
 
-        let mut tags = Self::append_app_tags(
-            vec![Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap()],
+        let tags = Self::append_app_tags(
+            vec![
+                Tag::<String>::from_utf8_strs("Content-Type", WARC_APPLICATION_TYPE).unwrap(),
+                Tag::<String>::from_utf8_strs("Content-Encoding", "gzip").unwrap(),
+            ],
             &archive_info.archive_info.url(),
             &archive_info.original_url,
             archive_info.archive_info.unix_ts(),
             archive_info.archive_info.depth(),
         );
-        tags.push(Tag::<String>::from_utf8_strs("Content-Encoding", "gzip").unwrap());
 
-        // first we deploy the file data
         let file_tx_id = self.upload_to_bundlr(data, tags).await?;
 
         return Ok(file_tx_id);
@@ -145,7 +147,9 @@ impl Uploader {
 
         let client = self.client.clone();
 
-        let data = file_tx.serialize()?;
+        let data = file_tx
+            .serialize()
+            .context(format!("could not serialize when uploading to bundlr"))?;
         let size = data.len();
 
         // if the data size if small, we can send it straight to bundlr
@@ -172,7 +176,7 @@ impl Uploader {
             return Ok(file_tx_id);
         } else {
             // otherwise we need to chunk the data and send it
-            debug!("Sending large bundles to Bundlr, chunking...");
+            debug!("sending large bundles to Bundlr, chunking...");
 
             let upload_info = client
                 .get(format!("{}/chunks/arweave/-1/-1", BUNDLR_URL))
@@ -182,11 +186,11 @@ impl Uploader {
             let upload_info = upload_info.json::<BundlrUploadID>().await?;
             let upload_id = upload_info.id;
 
-            debug!("Upload ID: {}", upload_id);
+            debug!("upload ID: {}", upload_id);
 
             if size < upload_info.min || size > upload_info.max {
                 return Err(anyhow!(
-                    "Chunk size out of allowed range: {} - {}, currently {}",
+                    "chunk size out of allowed range: {} - {}, currently {}",
                     upload_info.min,
                     upload_info.max,
                     size
@@ -206,7 +210,9 @@ impl Uploader {
                 tokio_stream::iter(data.iter().enumerate())
                     .map(|p| {
                         let retry_strategy = FixedInterval::from_millis(20)
-                            .map(jitter) // add jitter to delays
+                            // add jitter to delays
+                            .map(jitter)
+                            // retry 5 times
                             .take(5);
                         let index = p.0;
                         let uid = upload_id.clone();
@@ -228,7 +234,7 @@ impl Uploader {
             while let Some(result) = stream.next().await {
                 match result {
                     Ok(res) => {
-                        println!("{:?}", res.text().await);
+                        debug!("{:?}", res.text().await);
                         if counter == 0 {
                             debug!("{}", "started");
                         }
@@ -239,7 +245,7 @@ impl Uploader {
                     }
                 }
             }
-            debug!("Uploaded {} chunks", counter);
+            debug!("uploaded {} chunks", counter);
 
             let finish = client
                 .post(format!("{}/chunks/arweave/{}/-1", BUNDLR_URL, upload_id))
@@ -257,7 +263,7 @@ impl Uploader {
             }
 
             debug!(
-                "Successfully uploaded tx \n Status: {:#} \n Response: {:#}",
+                "successfully uploaded tx \n status: {:#} \n response: {:#}",
                 status, res
             );
 
@@ -290,8 +296,6 @@ impl Uploader {
         return tags;
     }
 }
-
-const CHUNKING_THRESHOLD: usize = 50_000_000;
 
 #[cfg(test)]
 mod test {
