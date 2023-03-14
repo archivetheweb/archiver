@@ -53,14 +53,14 @@ impl WarcWriter {
             d
         };
 
-        init_wayback_config(&parent_dir)?;
+        init_wayback_config(&parent_dir).context("could not initialize wayback configs")?;
 
-        setup_dir(&archive_name, &parent_dir)?;
+        setup_dir(&archive_name, &parent_dir).context("could not setup necessary directories")?;
 
         let (tx, rx) = sync_channel(1);
 
         // purge the redis cache for our collection
-        purge_redis(&archive_name)?;
+        purge_redis(&archive_name).context("could not purge redis cache")?;
 
         let port = if let Some(p) = port {
             p
@@ -119,14 +119,14 @@ impl WarcWriter {
             if mess == "ok" {
                 break;
             } else {
-                println!("Wayback error: {mess}");
+                println!("wayback error: {mess}");
                 std::process::exit(1);
             }
         }
 
         let s = System::new_all();
         if let None = s.process(PidExt::from_u32(process.id())) {
-            return Err(anyhow!("Wayback error: process is not running"));
+            return Err(anyhow!("wayback error: process is not running"));
         }
 
         let mut archive_dir = parent_dir.clone();
@@ -234,7 +234,8 @@ impl WarcWriter {
             "could not copy screenshot from {:?} to {:?}",
             &screenshot_dir, &dir
         ))?;
-        fs::remove_file(screenshot_dir)?;
+        fs::remove_file(&screenshot_dir)
+            .context(format!("could not remove file {}", screenshot_dir))?;
         Ok(dir)
     }
 
@@ -242,7 +243,7 @@ impl WarcWriter {
     // pub fn create_index()
 
     pub fn terminate(&mut self) -> anyhow::Result<()> {
-        debug!("Killing warc writer process with id {}", self.process.id());
+        debug!("killing warc writer process with id {}", self.process.id());
         self.process.kill()?;
         Ok(())
     }

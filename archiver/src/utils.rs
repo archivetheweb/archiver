@@ -1,3 +1,4 @@
+use anyhow::Context;
 use futures::Stream;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use reqwest::Url;
@@ -121,7 +122,7 @@ pub fn create_random_tmp_folder() -> anyhow::Result<PathBuf> {
     let rand_folder_name: String = get_random_string(11);
 
     let path = PathBuf::from(format!("/tmp/archiver-{}", rand_folder_name));
-    fs::create_dir(&path)?;
+    fs::create_dir(&path).context("failed to create random_tmp_folder")?;
     Ok(path)
 }
 
