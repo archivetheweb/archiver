@@ -8,7 +8,9 @@ macro_rules! aw {
     };
 }
 
-// RUST_LOG=debug cargo test --package archiver --test crawl --   crawl_website --exact --ignored
+/*
+RUST_LOG=debug cargo test --package archiver --test crawl --   crawl_website --exact --ignored
+ */
 #[test]
 #[ignore = "crawl"]
 fn crawl_website() -> anyhow::Result<()> {
@@ -23,8 +25,8 @@ fn crawl_website() -> anyhow::Result<()> {
         .archive_name(None)
         .crawl_depth(0)
         .timeout(45u64)
-        .min_wait_after_navigation(10u64)
-        .max_wait_after_navigation(15u64)
+        .min_wait_after_navigation(5u64)
+        .max_wait_after_navigation(7u64)
         // .domain_only(req.options.domain_only)
         .build()?;
     let runner = aw!(Runner::new(options))?;
