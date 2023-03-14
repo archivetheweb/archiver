@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
-use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
-use headless_chrome::Tab;
-use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
+use headless_chrome::{
+    browser::default_executable, protocol::cdp::Page::CaptureScreenshotFormatOption, Browser,
+    LaunchOptions, Tab,
+};
 use rand::Rng;
 use std::fs;
 use std::sync::Arc;
