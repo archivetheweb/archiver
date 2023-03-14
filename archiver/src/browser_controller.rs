@@ -68,7 +68,7 @@ impl BrowserController {
         let nv = match tab.navigate_to(&url) {
             Ok(t) => t,
             Err(e) => {
-                error!("could not navigate to {} with error {}", url, e);
+                warn!("could not navigate to {} with error {}", url, e);
                 tab.navigate_to(&url)?
             }
         };
@@ -102,8 +102,8 @@ impl BrowserController {
         match tab.evaluate(&get_scroll_script(60), true) {
             Ok(_) => {}
             Err(_) => {
-                // we retry
-                warn!("Scrolling for url {} is retrying", url);
+                // we retry with a smaller timeout (quicker scroll)
+                warn!("scrolling for url {} is retrying", url);
                 tab.evaluate(&get_scroll_script(30), true)?;
             }
         };
