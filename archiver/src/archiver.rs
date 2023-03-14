@@ -123,23 +123,17 @@ impl Archiver {
             if res.is_ok() {
                 let archive_request = res.unwrap();
 
-                if self.processing.contains(&archive_request.id) {
-                    // we do nothing, it's already processing
-                } else {
-                    debug!("Sending new archive {:?}", archive_request);
-                    self.processing.insert(archive_request.id.clone());
+                if !self.processing.contains(&archive_request.id) {
+                    debug!("found new archive to process {:?}", archive_request);
+                    let id = archive_request.id.clone();
                     match archiver_tx.send(archive_request).await {
-                        Ok(_) => {}
+                        Ok(_) => {
+                            self.processing.insert(id);
+                        }
                         Err(e) => {
                             error!("could not send archive_request to processing channel {}", e)
                         }
                     };
-                }
-            } else {
-                // we check if channel is empty
-                match res.err().unwrap() {
-                    mpsc::error::TryRecvError::Empty => {}
-                    mpsc::error::TryRecvError::Disconnected => debug!("disconnected"),
                 }
             }
 
@@ -185,7 +179,7 @@ impl Archiver {
                                 match tx.send(archive_request).await {
                                     Ok(_) => {}
                                     Err(e) => {
-                                        error!("Could not send archive processed {:?}", e)
+                                        error!("could not send archive processed {:?}", e)
                                     }
                                 };
                             }
@@ -222,13 +216,14 @@ impl Archiver {
                 "could not fetch archiving requests for {}",
                 wallet_address
             ))?;
-        debug!("Requests: {:#?}", requests);
 
         let mut valid_reqs = vec![];
 
+        let current_timestamp = get_unix_timestamp().as_secs() as i64;
+
         // we loop through the request, if one of them is expired, we delete it
         for r in requests {
-            if r.end_timestamp < get_unix_timestamp().as_secs() as i64 {
+            if r.end_timestamp < current_timestamp as i64 {
                 debug!("deleting archive request with id {}", r.id);
                 match c.delete_archive_request(&r.id).await {
                     Ok(_) => {
@@ -308,7 +303,7 @@ impl Archiver {
             // .domain_only(req.options.domain_only)
             .build()?;
 
-        debug!("Launching crawler with options: \n {:#?}", options);
+        debug!("launching crawler with options: \n {:#?}", options);
 
         let r = Runner::new(options)
             .await
@@ -320,8 +315,10 @@ impl Archiver {
 
         let url = &archive_request.options.urls[0];
 
-        let result = r.run_archiving(url).await?;
-        let title = result.title.clone();
+        let result = r
+            .run_archiving(url)
+            .await
+            .context(format!("archiving for url {} failed", url))?;
         debug!("result {:?}", result);
 
         if should_terminate.load(Ordering::Relaxed) {
@@ -339,13 +336,16 @@ impl Archiver {
 
         let ts = result.archive_info.unix_ts();
 
+        let title = result.title.clone();
+
         let upload_result = r.run_upload_crawl(result).await?;
 
-        debug!("Upload result {:#?}", upload_result);
+        debug!("upload result {:#?}", upload_result);
 
         if should_terminate.load(Ordering::Relaxed) {
             return Err(ArchiverError::EarlyTermination.into());
         }
+
         let archive_submission = ArchiveSubmission {
             full_url: url.into(),
             size: size as usize,
