@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
         Ok(env) => {
             if env == "debug" {
                 println!("{number:/>width$}", number = "", width = 20);
-                println!("{}", "Debug mode enabled");
+                println!("{}", "debug mode enabled");
                 println!("{number:/>width$}", number = "", width = 20);
                 println!();
             }
@@ -81,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
 
     let wallet_address = arweave.crypto.wallet_address()?.to_string();
 
-    debug!("Arweave Wallet {} loaded", wallet_address);
+    debug!("arweave wallet {} loaded", wallet_address);
 
     // check if we have funds in bundlr
     let res = match reqwest::get(format!(
@@ -101,7 +101,7 @@ async fn main() -> anyhow::Result<()> {
     if args.balance {
         let b = match res.balance.parse::<f64>() {
             Ok(num) => num,
-            Err(e) => panic!("Couldn't parse balance {}", e),
+            Err(e) => panic!("couldn't parse balance {}", e),
         };
 
         println!(
@@ -133,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
         ));
     }
 
-    debug!("Starting Uploader with {:#?}", args.clone());
+    debug!("starting uploader with args {:#?}", args.clone());
 
     let archive_options = ArchiverOptionsBuilder::default_builder()
         .writer_dir(args.writer_directory)
