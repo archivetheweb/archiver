@@ -57,7 +57,6 @@ impl WarpDRE {
         }
     }
 
-    // TODO add state, validity, errorMessages, events and validation
     pub async fn get_contract(&self, contract_id: &str) -> anyhow::Result<ContractRoot> {
         let mut query: HashMap<String, String> = HashMap::new();
         query.insert("id".into(), contract_id.into());

@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use archiver::runner::{Runner, RunnerOptions};
-
+use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
 macro_rules! aw {
     ($e:expr) => {
         tokio_test::block_on($e)
@@ -30,7 +30,29 @@ fn crawl_website() -> anyhow::Result<()> {
         // .domain_only(req.options.domain_only)
         .build()?;
     let runner = aw!(Runner::new(options))?;
-    let res = aw!(runner.run_archiving(""));
+    let res = aw!(runner.run_archiving("https://www.adobe.com/"));
     println!("{res:#?}");
+    Ok(())
+}
+
+#[test]
+#[ignore = "crawl"]
+fn headless_chrome() -> anyhow::Result<()> {
+    env_logger::init();
+    let options = LaunchOptions::default_builder()
+        .path(Some(default_executable().unwrap()))
+        .window_size(Some((1920, 1080)))
+        .idle_browser_timeout(Duration::from_secs(45))
+        .sandbox(true)
+        .build()
+        .expect("Couldn't find appropriate Chrome binary.");
+    let browser = Browser::new(options)?;
+    let ctx = browser.new_context()?;
+    let tab = ctx.new_tab()?;
+    let nv = tab.navigate_to("")?;
+    nv.wait_until_navigated()?;
+    let elems = nv.find_elements("a")?;
+    println!("{elems:?}");
+
     Ok(())
 }

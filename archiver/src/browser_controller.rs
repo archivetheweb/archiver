@@ -51,7 +51,7 @@ impl BrowserController {
             .path(Some(default_executable().unwrap()))
             .window_size(Some((1920, 1080)))
             .idle_browser_timeout(Duration::from_secs(idle_browser_timeout))
-            // warning only do this if in docker env
+            // warning only do this if in docker env as credentials/cookies could leak
             .sandbox(!is_docker)
             .build()
             .expect("Couldn't find appropriate Chrome binary.");
