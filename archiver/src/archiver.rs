@@ -300,7 +300,7 @@ impl Archiver {
             .timeout(options.browser_timeout)
             .min_wait_after_navigation(options.min_wait_after_navigation)
             .max_wait_after_navigation(options.max_wait_after_navigation)
-            // .domain_only(req.options.domain_only)
+            .domain_only(archive_request.options.domain_only)
             .build()?;
 
         debug!("launching crawler with options: \n {:#?}", options);

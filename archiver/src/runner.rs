@@ -41,6 +41,9 @@ pub struct RunnerOptions {
     // depth of crawl (0=page only, 1=page+links, 2=page+links+links in linked pages)
     #[builder(default = "1")]
     crawl_depth: i32,
+    // whether to only grab links in the domain or not
+    #[builder(default = "false")]
+    domain_only: bool,
     #[builder(default = "5")]
     concurrent_tabs: i32,
     #[builder(default = "2")]
@@ -157,16 +160,19 @@ impl Runner {
         let (base_url, full_url, domain) = self.prepare_urls(original_url)?;
 
         info!(
-            "initializing crawl of {} with depth {}, {} browsers, {} retries.",
+            "initializing crawl of {} with depth {}, {} browsers, domain_only: {} and {} retries.",
             original_url,
             self.options.crawl_depth,
             self.options.concurrent_tabs,
+            self.options.domain_only,
             self.options.url_retries
         );
         let mut crawler = Crawler::new(
             &base_url,
             &full_url,
+            &original_url,
             self.options.crawl_depth,
+            self.options.domain_only,
             self.options.concurrent_tabs,
             self.options.url_retries,
             self.options.timeout,
