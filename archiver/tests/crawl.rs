@@ -1,7 +1,11 @@
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, str::FromStr, time::Duration};
 
-use archiver::runner::{Runner, RunnerOptions};
+use archiver::{
+    runner::{Runner, RunnerOptions},
+    uploader::Uploader,
+};
 use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
+use tokio::fs;
 macro_rules! aw {
     ($e:expr) => {
         tokio_test::block_on($e)
@@ -23,14 +27,14 @@ fn crawl_website() -> anyhow::Result<()> {
         .writer_port(None)
         .writer_debug(false)
         .archive_name(None)
-        .crawl_depth(0)
+        .crawl_depth(1)
         .timeout(45u64)
         .min_wait_after_navigation(5u64)
         .max_wait_after_navigation(7u64)
-        // .domain_only(req.options.domain_only)
+        .domain_only(false)
         .build()?;
     let runner = aw!(Runner::new(options))?;
-    let res = aw!(runner.run_archiving("https://www.adobe.com/"));
+    let res = aw!(runner.run_archiving("https://ardrive.io/"));
     println!("{res:#?}");
     Ok(())
 }
@@ -55,4 +59,22 @@ fn headless_chrome() -> anyhow::Result<()> {
     println!("{elems:?}");
 
     Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_upload_large_data_item() {
+    env_logger::init();
+
+    let u = tokio_test::block_on(Uploader::new(
+        PathBuf::from_str(".secret/test_wallet.json").unwrap(),
+        "arweave",
+    ))
+    .unwrap();
+
+    let d = tokio_test::block_on(fs::read("../5MB.zip")).unwrap();
+
+    let r = tokio_test::block_on(u.upload_to_bundlr(d, vec![])).unwrap();
+
+    println!("{:?}", r)
 }

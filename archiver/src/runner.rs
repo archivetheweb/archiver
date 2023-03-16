@@ -170,9 +170,7 @@ impl Runner {
         let mut crawler = Crawler::new(
             &base_url,
             &full_url,
-            &original_url,
             self.options.crawl_depth,
-            self.options.domain_only,
             self.options.concurrent_tabs,
             self.options.url_retries,
             self.options.timeout,
