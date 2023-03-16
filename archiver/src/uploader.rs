@@ -136,7 +136,7 @@ impl Uploader {
         return Ok(screenshot_file_tx_id);
     }
 
-    async fn upload_to_bundlr(
+    pub async fn upload_to_bundlr(
         &self,
         data: Vec<u8>,
         tags: Vec<Tag<String>>,
@@ -185,7 +185,6 @@ impl Uploader {
                 .await?;
             let upload_info = upload_info.json::<BundlrUploadID>().await?;
             let upload_id = upload_info.id;
-
             debug!("upload ID: {}", upload_id);
 
             if size < upload_info.min || size > upload_info.max {
@@ -197,9 +196,11 @@ impl Uploader {
                 ));
             }
 
+            let chunk_size = upload_info.min;
+
             let data = data
                 .into_iter()
-                .chunks(upload_info.min)
+                .chunks(chunk_size)
                 .into_iter()
                 .map(|x| x.collect::<Vec<u8>>())
                 .collect::<Vec<Vec<u8>>>();
@@ -219,7 +220,13 @@ impl Uploader {
                         let client = client.clone();
                         Retry::spawn(retry_strategy, move || {
                             client
-                                .post(format!("{}/chunks/arweave/{}/{}", BUNDLR_URL, uid, index))
+                                .post(format!(
+                                    "{}/chunks/arweave/{}/{}",
+                                    BUNDLR_URL,
+                                    uid,
+                                    // needs to be the offset, not index
+                                    chunk_size * index
+                                ))
                                 .header("Content-Type", "application/octet-stream")
                                 .header("x-chunking-version", "2")
                                 .timeout(Duration::from_secs(20))
@@ -294,27 +301,5 @@ impl Uploader {
         ];
         tags.append(&mut t);
         return tags;
-    }
-}
-
-#[cfg(test)]
-mod test {
-
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn test_upload_large_data_item() {
-        let u = tokio_test::block_on(Uploader::new(
-            PathBuf::from_str(".secret/test_wallet.json").unwrap(),
-            "arweave",
-        ))
-        .unwrap();
-
-        let d = tokio_test::block_on(fs::read("res/5MB.zip")).unwrap();
-
-        let r = tokio_test::block_on(u.upload_to_bundlr(d, vec![])).unwrap();
-
-        println!("{:?}", r)
     }
 }
