@@ -185,7 +185,6 @@ impl Uploader {
                 .await?;
             let upload_info = upload_info.json::<BundlrUploadID>().await?;
             let upload_id = upload_info.id;
-
             debug!("upload ID: {}", upload_id);
 
             if size < upload_info.min || size > upload_info.max {
@@ -302,27 +301,5 @@ impl Uploader {
         ];
         tags.append(&mut t);
         return tags;
-    }
-}
-
-#[cfg(test)]
-mod test {
-
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn test_upload_large_data_item() {
-        let u = tokio_test::block_on(Uploader::new(
-            PathBuf::from_str(".secret/test_wallet.json").unwrap(),
-            "arweave",
-        ))
-        .unwrap();
-
-        let d = tokio_test::block_on(fs::read("res/5MB.zip")).unwrap();
-
-        let r = tokio_test::block_on(u.upload_to_bundlr(d, vec![])).unwrap();
-
-        println!("{:?}", r)
     }
 }

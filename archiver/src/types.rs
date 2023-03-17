@@ -42,7 +42,7 @@ pub struct ArchivingResult {
     pub original_url: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BundlrUploadID {
     pub id: String,
     pub min: usize,
@@ -98,5 +98,24 @@ impl ArchiveInfo {
             timestamp: ts,
             url: url.into(),
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct UrlInfo {
+    pub url: String,
+    pub domain: String,
+}
+
+impl PartialEq for UrlInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.url == other.url
+    }
+}
+impl Eq for UrlInfo {}
+
+impl std::hash::Hash for UrlInfo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.url.hash(state);
     }
 }
