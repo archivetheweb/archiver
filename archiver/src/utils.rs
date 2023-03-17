@@ -8,6 +8,8 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::types::UrlInfo;
+
 pub const ARCHIVE_DIR: &str = "archiver";
 pub const BASE_URL: &str = "http://localhost";
 pub const WARC_APPLICATION_TYPE: &str = "application/warc";
@@ -49,13 +51,14 @@ lazy_static! {
     };
 }
 
-pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<String>> {
+pub fn normalize_url_map(base_url: String) -> Box<dyn Fn(&String) -> Option<UrlInfo>> {
     return Box::new(move |url| normalize_url(&base_url, url));
 }
 
-pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
+pub fn normalize_url(base_url: &str, url: &String) -> Option<UrlInfo> {
     let new_url = Url::parse(url.as_str());
     match new_url {
+        // https://localhost:<PORT>/<ARCHIVE_NAME>/record/<URL>
         Ok(mut new_url) => {
             let scheme = new_url.scheme();
             if scheme != "https" && scheme != "http" {
@@ -64,7 +67,10 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
 
             // we remove the fragments (#)
             new_url.set_fragment(None);
-            Some(new_url.to_string())
+            Some(UrlInfo {
+                url: new_url.to_string(),
+                domain: get_domain(&extract_url(new_url.as_str())),
+            })
         }
         Err(_e) => {
             if url.starts_with('/') {
@@ -74,12 +80,21 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<String> {
                 };
 
                 u.set_fragment(None);
-                Some(u.to_string())
+                Some(UrlInfo {
+                    url: u.to_string(),
+                    domain: get_domain(&extract_url(u.as_str().into())),
+                })
             } else {
                 return None;
             }
         }
     }
+}
+
+fn get_domain(url: &str) -> String {
+    let u = Url::parse(url).unwrap();
+    let u = u.domain().unwrap();
+    u.replace("www.", "")
 }
 
 pub fn assert_stream_send<'u, R>(
@@ -132,21 +147,37 @@ mod test {
     #[test]
     fn test_normalize() {
         struct Test {
-            expected: Option<String>,
+            expected: Option<UrlInfo>,
             value: String,
         }
         let tests = vec![
             Test {
-                value: "https://example.com#hello".into(),
-                expected: Some("https://example.com/".into()),
+                value: "https://localhost:8080/aaaa/record/https://example.com#hello".into(),
+                expected: Some(UrlInfo {
+                    url: "https://localhost:8080/aaaa/record/https://example.com".into(),
+                    domain: "example.com".into(),
+                }),
             },
             Test {
-                value: "http://example.com".into(),
-                expected: Some("http://example.com/".into()),
+                value: "https://localhost:8080/aaaa/record/https://www.example.com#hello".into(),
+                expected: Some(UrlInfo {
+                    url: "https://localhost:8080/aaaa/record/https://www.example.com".into(),
+                    domain: "example.com".into(),
+                }),
             },
             Test {
-                value: "/hello#test".into(),
-                expected: Some("https://example.com/hello".into()),
+                value: "https://localhost:8080/aaaa/record/http://example.com".into(),
+                expected: Some(UrlInfo {
+                    url: "https://localhost:8080/aaaa/record/http://example.com".into(),
+                    domain: "example.com".into(),
+                }),
+            },
+            Test {
+                value: "/aaaa/record/https://example.com/hello#test".into(),
+                expected: Some(UrlInfo {
+                    url: "https://localhost:8080/aaaa/record/https://example.com/hello".into(),
+                    domain: "example.com".into(),
+                }),
             },
             Test {
                 value: "javascript:print();".into(),
@@ -162,7 +193,7 @@ mod test {
             },
         ];
 
-        let n = normalize_url_map("https://example.com".to_string());
+        let n = normalize_url_map("https://localhost:8080".to_string());
 
         for test in tests {
             assert_eq!(n(&test.value), test.expected);

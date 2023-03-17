@@ -42,7 +42,7 @@ pub struct ArchivingResult {
     pub original_url: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BundlrUploadID {
     pub id: String,
     pub min: usize,
@@ -99,4 +99,10 @@ impl ArchiveInfo {
             url: url.into(),
         })
     }
+}
+
+#[derive(Debug, PartialEq, Hash, Eq)]
+pub struct UrlInfo {
+    pub url: String,
+    pub domain: String,
 }

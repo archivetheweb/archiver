@@ -142,7 +142,6 @@ impl BrowserController {
                     .unwrap()
             })
             .filter_map(|x| {
-                // TODO allow to filter specific links (filter mailto: etc)
                 for i in 0..x.len() {
                     if x[i] == "href" {
                         return Some(x[i + 1].clone());

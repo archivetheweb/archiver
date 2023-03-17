@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use reqwest::Url;
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -11,7 +12,7 @@ use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
-    types::CrawlResult,
+    types::{CrawlResult, UrlInfo},
     utils::{extract_url, normalize_url_map},
 };
 
@@ -19,8 +20,10 @@ pub struct Crawler {
     visited: HashSet<String>,
     failed: HashMap<String, i32>,
     depth: i32,
+    domain_only: bool,
     base_url: String,
     url: String,
+    original_url: String,
     concurrent_tabs: i32,
     url_retries: i32,
     main_title: Arc<tokio::sync::Mutex<String>>,
@@ -32,8 +35,10 @@ pub struct Crawler {
 impl Crawler {
     pub fn new(
         base_url: &str,
-        url: &str,
+        full_url: &str,
+        original_url: &str,
         depth: i32,
+        domain_only: bool,
         concurrent_tabs: i32,
         url_retries: i32,
         timeout: u64,
@@ -44,8 +49,10 @@ impl Crawler {
             visited: HashSet::new(),
             failed: HashMap::new(),
             base_url: base_url.into(),
+            domain_only,
             depth,
-            url: url.into(),
+            url: full_url.into(),
+            original_url: original_url.into(),
             concurrent_tabs,
             url_retries,
             main_title: Arc::new(tokio::sync::Mutex::new(String::from(""))),
@@ -63,7 +70,7 @@ impl Crawler {
         // the first element being the url visited, next element being all the new links found on the page,
         // and last being the depth of the visited_url
         let (scraped_urls_tx, mut scraped_urls_rx) =
-            mpsc::channel::<(String, Vec<String>, i32)>(self.concurrent_tabs as usize + 10);
+            mpsc::channel::<(String, Vec<UrlInfo>, i32)>(self.concurrent_tabs as usize + 10);
 
         let (visit_url_tx, visit_url_rx) = mpsc::channel::<(String, i32)>(1000);
         let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(String, i32)>(1000);
@@ -80,6 +87,9 @@ impl Crawler {
         // we send the first url to crawl
         visit_url_tx.send((self.url.clone(), 0)).await.unwrap();
 
+        let d = Url::parse(&self.original_url).unwrap();
+        let domain = d.domain().unwrap();
+
         while !should_terminate.load(Ordering::Relaxed) {
             // we receive the scraped urls
             let res = scraped_urls_rx.try_recv();
@@ -91,14 +101,24 @@ impl Crawler {
                     &visited_url, depth
                 );
                 self.visited.insert(visited_url.to_string());
-                let new_urls: HashSet<String> = HashSet::from_iter(new_scraped_urls);
+                let new_urls: HashSet<UrlInfo> = HashSet::from_iter(new_scraped_urls);
                 for new_url in new_urls.iter() {
-                    if !self.visited.contains(new_url) && depth < self.depth {
-                        debug!("adding {} to the queue", &new_url);
-                        match visit_url_tx.send((new_url.to_string(), depth + 1)).await {
+                    if !self.visited.contains(&new_url.url) && depth < self.depth {
+                        if self.domain_only && new_url.domain != domain {
+                            debug!("skipping {} as it is a domain only crawl", new_url.url);
+                            continue;
+                        }
+                        debug!("adding {} to the queue", &new_url.url);
+                        match visit_url_tx
+                            .send((new_url.url.to_string(), depth + 1))
+                            .await
+                        {
                             Ok(_) => {}
                             Err(e) => {
-                                error!("could not send new_url:{} to visit_url_tx {}", new_url, e)
+                                error!(
+                                    "could not send new_url:{} to visit_url_tx {}",
+                                    new_url.url, e
+                                )
                             }
                         };
                     }
@@ -190,7 +210,7 @@ impl Crawler {
 
     fn processor(
         &self,
-        scraped_urls_tx: mpsc::Sender<(String, Vec<String>, i32)>,
+        scraped_urls_tx: mpsc::Sender<(String, Vec<UrlInfo>, i32)>,
         visit_url_rx: mpsc::Receiver<(String, i32)>,
         failed_url_tx: mpsc::Sender<(String, i32)>,
         active_tabs: Arc<AtomicUsize>,
@@ -293,7 +313,7 @@ impl Crawler {
                                     .get_links(&tab)
                                     .iter()
                                     .filter_map(normalize_url_map(base_url.into()))
-                                    .collect::<Vec<String>>(),
+                                    .collect::<Vec<UrlInfo>>(),
                                 false,
                             );
                         })
