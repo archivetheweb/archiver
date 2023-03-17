@@ -131,7 +131,7 @@ pub fn jitter(duration: Duration) -> Duration {
 
 pub fn extract_url(url: &str) -> String {
     if url.contains("/mp_/") {
-        return url.split("/record/mp_/").nth(1).unwrap().to_string();
+        return url.split("record/mp_/").nth(1).unwrap().to_string();
     }
     url.split("record/").nth(1).unwrap().to_string()
 }
