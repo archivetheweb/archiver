@@ -108,7 +108,7 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<UrlInfo> {
     }
 }
 
-fn get_domain(url: &str) -> anyhow::Result<String> {
+pub fn get_domain(url: &str) -> anyhow::Result<String> {
     let u = Url::parse(url)?;
     let u = u.domain();
     match u {
