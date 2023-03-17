@@ -67,9 +67,18 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<UrlInfo> {
 
             // we remove the fragments (#)
             new_url.set_fragment(None);
+
+            let domain = match get_domain(&extract_url(new_url.as_str())) {
+                Ok(d) => d,
+                Err(e) => {
+                    debug!("URL: {}, could not get domain {}", new_url.as_str(), e);
+                    return None;
+                }
+            };
+
             Some(UrlInfo {
-                url: new_url.to_string(),
-                domain: get_domain(&extract_url(new_url.as_str())),
+                url: standardize_url(new_url.as_str()),
+                domain: domain,
             })
         }
         Err(_e) => {
@@ -79,10 +88,18 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<UrlInfo> {
                     Err(_) => return None,
                 };
 
+                let domain = match get_domain(&extract_url(u.as_str())) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        debug!("pError, URL: {}, could not get domain {}", u.as_str(), e);
+                        return None;
+                    }
+                };
+
                 u.set_fragment(None);
                 Some(UrlInfo {
-                    url: u.to_string(),
-                    domain: get_domain(&extract_url(u.as_str().into())),
+                    url: standardize_url(u.as_str()),
+                    domain: domain,
                 })
             } else {
                 return None;
@@ -91,10 +108,13 @@ pub fn normalize_url(base_url: &str, url: &String) -> Option<UrlInfo> {
     }
 }
 
-fn get_domain(url: &str) -> String {
-    let u = Url::parse(url).unwrap();
-    let u = u.domain().unwrap();
-    u.replace("www.", "")
+fn get_domain(url: &str) -> anyhow::Result<String> {
+    let u = Url::parse(url)?;
+    let u = u.domain();
+    match u {
+        Some(u) => Ok(u.replace("www.", "")),
+        None => return Err(anyhow::anyhow!("could not get domain")),
+    }
 }
 
 pub fn assert_stream_send<'u, R>(
@@ -110,7 +130,14 @@ pub fn jitter(duration: Duration) -> Duration {
 }
 
 pub fn extract_url(url: &str) -> String {
+    if url.contains("/mp_/") {
+        return url.split("/record/mp_/").nth(1).unwrap().to_string();
+    }
     url.split("record/").nth(1).unwrap().to_string()
+}
+
+fn standardize_url(url: &str) -> String {
+    url.replace("/mp_/", "/").into()
 }
 
 pub fn extract_collection_name(url: &str) -> String {

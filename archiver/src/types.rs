@@ -101,8 +101,21 @@ impl ArchiveInfo {
     }
 }
 
-#[derive(Debug, PartialEq, Hash, Eq)]
+#[derive(Debug)]
 pub struct UrlInfo {
     pub url: String,
     pub domain: String,
+}
+
+impl PartialEq for UrlInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.url == other.url
+    }
+}
+impl Eq for UrlInfo {}
+
+impl std::hash::Hash for UrlInfo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.url.hash(state);
+    }
 }

@@ -18,6 +18,7 @@ use crate::{
 
 pub struct Crawler {
     visited: HashSet<String>,
+    visiting: HashSet<String>,
     failed: HashMap<String, i32>,
     depth: i32,
     domain_only: bool,
@@ -47,6 +48,7 @@ impl Crawler {
     ) -> Crawler {
         Crawler {
             visited: HashSet::new(),
+            visiting: HashSet::new(),
             failed: HashMap::new(),
             base_url: base_url.into(),
             domain_only,
@@ -101,14 +103,19 @@ impl Crawler {
                     &visited_url, depth
                 );
                 self.visited.insert(visited_url.to_string());
+                self.visiting.remove(&visited_url);
                 let new_urls: HashSet<UrlInfo> = HashSet::from_iter(new_scraped_urls);
                 for new_url in new_urls.iter() {
-                    if !self.visited.contains(&new_url.url) && depth < self.depth {
+                    if !self.visited.contains(&new_url.url)
+                        && !self.visiting.contains(&new_url.url)
+                        && depth < self.depth
+                    {
                         if self.domain_only && new_url.domain != domain {
-                            debug!("skipping {} as it is a domain only crawl", new_url.url);
+                            // debug!("skipping {} as it is a domain only crawl", new_url.url);
                             continue;
                         }
                         debug!("adding {} to the queue", &new_url.url);
+                        self.visiting.insert(new_url.url.clone());
                         match visit_url_tx
                             .send((new_url.url.to_string(), depth + 1))
                             .await
@@ -128,6 +135,7 @@ impl Crawler {
             if self.url_retries > 0 {
                 match failed_url_rx.try_recv() {
                     Ok((url, depth)) => {
+                        self.visiting.remove(&url);
                         match self.failed.get_mut(&url.to_string()) {
                             Some(count) if count <= &mut self.url_retries => {
                                 warn!(
