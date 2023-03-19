@@ -1,10 +1,7 @@
 use std::{
     path::PathBuf,
     str::FromStr,
-    sync::{
-        Arc,
-        {atomic::AtomicBool, atomic::Ordering},
-    },
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use anyhow::{anyhow, Context};
@@ -126,16 +123,6 @@ impl Runner {
             options: lo,
             should_terminate,
         })
-    }
-
-    pub async fn run_all(&self, url: &str) -> anyhow::Result<()> {
-        let crawl = self.run_archiving(url).await?;
-
-        if !self.should_terminate.load(Ordering::Relaxed) {
-            self.run_upload_crawl(crawl).await?;
-        }
-
-        Ok(())
     }
 
     fn prepare_urls(&self, url: &str) -> anyhow::Result<(String, String, String)> {

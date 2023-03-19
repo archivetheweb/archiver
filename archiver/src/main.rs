@@ -62,10 +62,10 @@ async fn main() -> anyhow::Result<()> {
     match std::env::var("RUST_LOG") {
         Ok(env) => {
             if env == "debug" {
-                println!("{number:/>width$}", number = "", width = 20);
-                println!("{}", "debug mode enabled");
-                println!("{number:/>width$}", number = "", width = 20);
-                println!();
+                debug!("{number:/>width$}", number = "", width = 20);
+                debug!("{}", "debug mode enabled");
+                debug!("{number:/>width$}", number = "", width = 20);
+                debug!("");
             }
         }
         _ => {}
