@@ -334,7 +334,8 @@ mod test {
             timestamp: get_unix_timestamp().as_secs() as i64,
             options: ArchiveOptions {
                 depth: 0,
-                domain_only: false,
+                crawl_type: atw::state::CrawlType::DomainAndLinks,
+                domain_only: None,
             },
             screenshot_tx: "".into(),
             title: "".into(),
