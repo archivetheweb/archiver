@@ -26,7 +26,7 @@ lazy_static! {
         if env == "production" {
             return "dD1DuvgM_Vigtnv4vl2H1IYn9CgLvYuhbEWPOL-_4Mw".into();
         }
-        "-27RfG2DJAI3ddQlrXkN1rmS5fBSC4eG8Zfhz8skYTU".into()
+        "51M3s8hKonwD1-7NKnpyf2gcwha9ql1wCz2BOnxRGwI".into()
     };
     pub static ref APP_NAME: String = {
         let env = match std::env::var("ENVIRONMENT") {

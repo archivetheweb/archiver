@@ -4,6 +4,7 @@ use archiver::{
     runner::{Runner, RunnerOptions},
     uploader::Uploader,
 };
+use atw::state::CrawlType;
 use headless_chrome::{browser::default_executable, Browser, LaunchOptions};
 use tokio::fs;
 macro_rules! aw {
@@ -21,20 +22,20 @@ fn crawl_website() -> anyhow::Result<()> {
     env_logger::init();
     let options = RunnerOptions::default_builder()
         .writer_dir(Some(PathBuf::from(".")))
-        .concurrent_tabs(10)
+        .concurrent_tabs(25)
         .url_retries(2)
         .with_upload(false)
         .writer_port(None)
         .writer_debug(false)
         .archive_name(None)
-        .crawl_depth(1)
+        .crawl_depth(5)
         .timeout(45u64)
         .min_wait_after_navigation(5u64)
         .max_wait_after_navigation(7u64)
-        .domain_only(false)
+        .crawl_type(CrawlType::DomainOnly)
         .build()?;
     let runner = aw!(Runner::new(options))?;
-    let res = aw!(runner.run_archiving("https://ardrive.io/"));
+    let res = aw!(runner.run_archiving("https://archivetheweb.com"));
     println!("{res:#?}");
     Ok(())
 }

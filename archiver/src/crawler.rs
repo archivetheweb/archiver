@@ -1,3 +1,4 @@
+use atw::state::CrawlType;
 use futures::StreamExt;
 use reqwest::Url;
 use std::{
@@ -13,7 +14,7 @@ use tokio::{sync::mpsc, task, time::sleep};
 use crate::{
     browser_controller::BrowserController,
     types::{CrawlResult, UrlInfo},
-    utils::{extract_url, normalize_url_map},
+    utils::{extract_url, get_domain, normalize_url_map},
 };
 
 pub struct Crawler {
@@ -21,7 +22,7 @@ pub struct Crawler {
     visiting: HashSet<String>,
     failed: HashMap<String, i32>,
     depth: i32,
-    domain_only: bool,
+    crawl_type: CrawlType,
     base_url: String,
     url: String,
     original_url: String,
@@ -39,7 +40,7 @@ impl Crawler {
         full_url: &str,
         original_url: &str,
         depth: i32,
-        domain_only: bool,
+        crawl_type: CrawlType,
         concurrent_tabs: i32,
         url_retries: i32,
         timeout: u64,
@@ -51,7 +52,7 @@ impl Crawler {
             visiting: HashSet::new(),
             failed: HashMap::new(),
             base_url: base_url.into(),
-            domain_only,
+            crawl_type,
             depth,
             url: full_url.into(),
             original_url: original_url.into(),
@@ -110,10 +111,21 @@ impl Crawler {
                         && !self.visiting.contains(&new_url.url)
                         && depth < self.depth
                     {
-                        if self.domain_only && new_url.domain != domain {
-                            // debug!("skipping {} as it is a domain only crawl", new_url.url);
-                            continue;
+                        match self.crawl_type {
+                            CrawlType::DomainOnly => {
+                                if new_url.domain != domain {
+                                    // debug!("skipping {} as it is a domain only crawl", new_url.url);
+                                    continue;
+                                }
+                            }
+                            CrawlType::DomainWithPageLinks => {
+                                if get_domain(&extract_url(&visited_url)).unwrap() != domain {
+                                    continue;
+                                }
+                            }
+                            CrawlType::DomainAndLinks => {}
                         }
+
                         debug!("adding {} to the queue", &new_url.url);
                         self.visiting.insert(new_url.url.clone());
                         match visit_url_tx

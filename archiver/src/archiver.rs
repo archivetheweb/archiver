@@ -300,7 +300,7 @@ impl Archiver {
             .timeout(options.browser_timeout)
             .min_wait_after_navigation(options.min_wait_after_navigation)
             .max_wait_after_navigation(options.max_wait_after_navigation)
-            .domain_only(archive_request.options.domain_only)
+            .crawl_type(archive_request.options.crawl_type.clone())
             .build()?;
 
         debug!("launching crawler with options: \n {:#?}", options);
@@ -355,7 +355,8 @@ impl Archiver {
             arweave_tx: upload_result.warc_id[0].clone(),
             options: ArchiveOptions {
                 depth: archive_request.options.depth,
-                domain_only: archive_request.options.domain_only,
+                crawl_type: archive_request.options.crawl_type.clone(),
+                domain_only: None,
             },
             screenshot_tx: upload_result.screenshot_id,
             title: title,
