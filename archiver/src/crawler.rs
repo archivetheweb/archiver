@@ -90,8 +90,7 @@ impl Crawler {
         // we send the first url to crawl
         visit_url_tx.send((self.url.clone(), 0)).await.unwrap();
 
-        let d = Url::parse(&self.original_url).unwrap();
-        let domain = d.domain().unwrap();
+        let domain = get_domain(&self.original_url).unwrap();
 
         while !should_terminate.load(Ordering::Relaxed) {
             // we receive the scraped urls
