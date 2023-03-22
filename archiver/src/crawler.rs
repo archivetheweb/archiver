@@ -12,7 +12,7 @@ use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
-    types::{CrawlResult, UrlInfo},
+    types::{CrawlRequest, CrawlResult, PageCrawlResult, UrlInfo},
     utils::{extract_url, get_domain, normalize_url_map},
 };
 
@@ -68,14 +68,11 @@ impl Crawler {
         &mut self,
         should_terminate: Arc<AtomicBool>,
     ) -> anyhow::Result<CrawlResult> {
-        // we setup a channel for the a new URL. This channel will send an (String, Vec<String>,i32) tuple,
-        // the first element being the url visited, next element being all the new links found on the page,
-        // and last being the depth of the visited_url
         let (scraped_urls_tx, mut scraped_urls_rx) =
-            mpsc::channel::<(String, Vec<UrlInfo>, i32)>(self.concurrent_tabs as usize + 10);
+            mpsc::channel::<PageCrawlResult>(self.concurrent_tabs as usize + 10);
 
-        let (visit_url_tx, visit_url_rx) = mpsc::channel::<(String, i32)>(1000);
-        let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<(String, i32)>(1000);
+        let (visit_url_tx, visit_url_rx) = mpsc::channel::<CrawlRequest>(1000);
+        let (failed_url_tx, mut failed_url_rx) = mpsc::channel::<CrawlRequest>(1000);
 
         let active_tabs = Arc::new(AtomicUsize::new(0));
 
@@ -87,7 +84,10 @@ impl Crawler {
         );
 
         // we send the first url to crawl
-        visit_url_tx.send((self.url.clone(), 0)).await.unwrap();
+        visit_url_tx
+            .send(CrawlRequest::new(self.url.clone(), 0))
+            .await
+            .unwrap();
 
         let domain = get_domain(&self.original_url).unwrap();
 
@@ -96,14 +96,17 @@ impl Crawler {
             let res = scraped_urls_rx.try_recv();
 
             if res.is_ok() {
-                let (visited_url, new_scraped_urls, depth) = res.unwrap();
+                let crawl_result = res.unwrap();
+                let visited_url = crawl_result.visited_url();
+                let depth = crawl_result.depth();
                 debug!(
                     "adding {} as a visited url at depth {}",
-                    &visited_url, depth
+                    &visited_url,
+                    crawl_result.depth()
                 );
-                self.visited.insert(visited_url.to_string());
+                self.visited.insert(visited_url.clone());
                 self.visiting.remove(&visited_url);
-                let new_urls: HashSet<UrlInfo> = HashSet::from_iter(new_scraped_urls);
+                let new_urls: HashSet<UrlInfo> = HashSet::from_iter(crawl_result.links());
                 for new_url in new_urls.iter() {
                     if !self.visited.contains(&new_url.url)
                         && !self.visiting.contains(&new_url.url)
@@ -127,7 +130,7 @@ impl Crawler {
                         debug!("adding {} to the queue", &new_url.url);
                         self.visiting.insert(new_url.url.clone());
                         match visit_url_tx
-                            .send((new_url.url.to_string(), depth + 1))
+                            .send(CrawlRequest::new(new_url.url.to_string(), depth + 1))
                             .await
                         {
                             Ok(_) => {}
@@ -144,7 +147,9 @@ impl Crawler {
 
             if self.url_retries > 0 {
                 match failed_url_rx.try_recv() {
-                    Ok((url, depth)) => {
+                    Ok(crawl_request) => {
+                        let url = crawl_request.url();
+                        let depth = crawl_request.depth();
                         self.visiting.remove(&url);
                         match self.failed.get_mut(&url.to_string()) {
                             Some(count) if count <= &mut self.url_retries => {
@@ -153,7 +158,10 @@ impl Crawler {
                                     url, depth, count
                                 );
                                 // we resend the url to be fetched
-                                match visit_url_tx.send((url.clone(), depth)).await {
+                                match visit_url_tx
+                                    .send(CrawlRequest::new(url.clone(), depth))
+                                    .await
+                                {
                                     Ok(_) => {}
                                     Err(e) => {
                                         error!(
@@ -168,7 +176,10 @@ impl Crawler {
                                 warn!("first retry of url {} at d={}", url, depth);
                                 self.failed.insert(url.to_string(), 0);
                                 // this could be blocking if not in it's own thread or not enough buffer
-                                match visit_url_tx.send((url.clone(), depth)).await {
+                                match visit_url_tx
+                                    .send(CrawlRequest::new(url.clone(), depth))
+                                    .await
+                                {
                                     Ok(_) => {}
                                     Err(e) => {
                                         error!("could not send url {} to visit_url_tx for first try {}", url, e)
@@ -218,19 +229,19 @@ impl Crawler {
         let url = extract_url(&self.url);
         info!("crawl of {} completed successfully", extract_url(&self.url));
 
-        return Ok(CrawlResult {
-            failed,
-            visited: self.visited.clone(),
+        Ok(CrawlResult::new(
             url,
-            main_title: self.main_title.lock().await.to_string(),
-        });
+            self.main_title.lock().await.to_string(),
+            self.visited.clone(),
+            failed,
+        ))
     }
 
     fn processor(
         &self,
-        scraped_urls_tx: mpsc::Sender<(String, Vec<UrlInfo>, i32)>,
-        visit_url_rx: mpsc::Receiver<(String, i32)>,
-        failed_url_tx: mpsc::Sender<(String, i32)>,
+        scraped_urls_tx: mpsc::Sender<PageCrawlResult>,
+        visit_url_rx: mpsc::Receiver<CrawlRequest>,
+        failed_url_tx: mpsc::Sender<CrawlRequest>,
         active_tabs: Arc<AtomicUsize>,
     ) {
         let concurrent_tabs = self.concurrent_tabs;
@@ -242,8 +253,9 @@ impl Crawler {
         let timeout = self.timeout;
         tokio::spawn(async move {
             tokio_stream::wrappers::ReceiverStream::new(visit_url_rx)
-                .for_each_concurrent(concurrent_tabs as usize, |queued_url| {
-                    let (url, depth) = queued_url.clone();
+                .for_each_concurrent(concurrent_tabs as usize, |crawl_request| {
+                    let url = crawl_request.url();
+                    let depth = crawl_request.depth();
                     debug!("crawling {} at depth {}", url, depth);
 
                     let at = active_tabs.clone();
@@ -342,7 +354,10 @@ impl Crawler {
                             Err(e) => {
                                 error!("problem spawning a blocking thread {}", e);
                                 at.fetch_sub(1, Ordering::SeqCst);
-                                failed_url_tx.send((url, depth)).await.unwrap();
+                                failed_url_tx
+                                    .send(CrawlRequest::new(url, depth))
+                                    .await
+                                    .unwrap();
                                 return;
                             }
                         };
@@ -351,14 +366,17 @@ impl Crawler {
                         // tells us whether there was an error or not
                         // if so, we send the url to the failed url channel
                         if links.1 {
-                            match failed_url_tx.send((url, depth)).await {
+                            match failed_url_tx.send(CrawlRequest::new(url, depth)).await {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!("could not send to failed_url_tx {}", e)
                                 }
                             };
                         } else {
-                            match scraped_urls_tx.send((url, links.0, depth)).await {
+                            match scraped_urls_tx
+                                .send(PageCrawlResult::new(url, links.0, depth))
+                                .await
+                            {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!("could not send to scraped_urls_tx {}", e)

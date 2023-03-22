@@ -27,10 +27,39 @@ pub struct BundlrBalance {
 
 #[derive(Debug)]
 pub struct CrawlResult {
-    pub url: String,
-    pub main_title: String,
-    pub visited: HashSet<String>,
-    pub failed: HashSet<String>,
+    url: String,
+    main_title: String,
+    visited: HashSet<String>,
+    failed: HashSet<String>,
+}
+
+impl CrawlResult {
+    pub fn new(
+        url: String,
+        main_title: String,
+        visited: HashSet<String>,
+        failed: HashSet<String>,
+    ) -> Self {
+        CrawlResult {
+            url,
+            main_title,
+            visited: visited,
+            failed: failed,
+        }
+    }
+
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
+    pub fn main_title(&self) -> String {
+        self.main_title.clone()
+    }
+    pub fn visited(&self) -> HashSet<String> {
+        self.visited.clone()
+    }
+    pub fn failed(&self) -> HashSet<String> {
+        self.failed.clone()
+    }
 }
 
 #[derive(Debug)]
@@ -101,10 +130,59 @@ impl ArchiveInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UrlInfo {
     pub url: String,
     pub domain: String,
+}
+
+#[derive(Debug)]
+pub struct PageCrawlResult {
+    visited_url: String,
+    links: Vec<UrlInfo>,
+    depth: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct CrawlRequest {
+    url: String,
+    depth: i32,
+}
+
+impl CrawlRequest {
+    pub fn new(url: String, depth: i32) -> Self {
+        CrawlRequest { url, depth }
+    }
+
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
+
+    pub fn depth(&self) -> i32 {
+        self.depth
+    }
+}
+
+impl PageCrawlResult {
+    pub fn new(visited_url: String, links: Vec<UrlInfo>, depth: i32) -> Self {
+        PageCrawlResult {
+            visited_url,
+            links,
+            depth,
+        }
+    }
+
+    pub fn visited_url(&self) -> String {
+        self.visited_url.clone()
+    }
+
+    pub fn links(&self) -> Vec<UrlInfo> {
+        self.links.clone()
+    }
+
+    pub fn depth(&self) -> i32 {
+        self.depth
+    }
 }
 
 impl PartialEq for UrlInfo {

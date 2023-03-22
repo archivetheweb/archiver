@@ -189,7 +189,7 @@ impl Runner {
             warc_files: files,
             screenshot_file: screenshot_dir,
             archive_info: archive_info,
-            title: crawl.main_title,
+            title: crawl.main_title(),
             original_url: original_url.into(),
         })
     }
