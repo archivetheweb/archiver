@@ -32,7 +32,7 @@ fn crawl_website() -> anyhow::Result<()> {
         .timeout(45u64)
         .min_wait_after_navigation(5u64)
         .max_wait_after_navigation(7u64)
-        .crawl_type(CrawlType::DomainOnly)
+        .crawl_type(CrawlType::DomainWithPageLinks)
         .build()?;
     let runner = aw!(Runner::new(options))?;
     let res = aw!(runner.run_archiving("https://archivetheweb.com"));
