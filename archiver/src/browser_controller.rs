@@ -12,31 +12,6 @@ use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
 
 use crate::utils::{extract_collection_name, get_tmp_screenshot_dir};
 
-fn get_scroll_script(scroll_timeout: u64, scroll_speed_ms: u64) -> String {
-    format!(
-        r#" new Promise((resolve) => {{
-            var totalHeight = 0;
-            var distance = 100;
-            let scrollTimeout = {};
-            var maxTime = scrollTimeout*1000;
-            var runningTime = 0;
-            let scrollSpeedMs = {};
-            var timer = setInterval(() => {{
-                var scrollHeight = document.body.scrollHeight;
-                window.scrollBy(0, distance);
-                totalHeight += distance;
-                runningTime += scrollSpeedMs;
-        
-                if(totalHeight >= scrollHeight - window.innerHeight || runningTime >maxTime){{
-                    clearInterval(timer);
-                    resolve("ok");
-                }}
-            }}, scrollSpeedMs);
-        }});"#,
-        scroll_timeout, scroll_speed_ms,
-    )
-}
-
 pub struct BrowserController {
     browser: Browser,
     min_wait_secs: u64,
@@ -107,12 +82,18 @@ impl BrowserController {
         }
 
         debug!("scrolling....");
-        match tab.evaluate(&get_scroll_script(self.idle_browser_timeout - 2, 60), true) {
+        match tab.evaluate(
+            &Self::get_scroll_script(self.idle_browser_timeout - 2, 60),
+            true,
+        ) {
             Ok(_) => {}
             Err(_) => {
-                // we retry with a smaller timeout (quicker scroll)
+                // we retry with a smaller timeout
                 warn!("scrolling for url {} is retrying", url);
-                tab.evaluate(&get_scroll_script(self.idle_browser_timeout - 2, 30), true)?;
+                tab.evaluate(
+                    &Self::get_scroll_script(self.idle_browser_timeout - 2, 30),
+                    true,
+                )?;
             }
         };
         debug!("successfully scrolled, sleeping for {} seconds", rndm);
@@ -166,6 +147,31 @@ impl BrowserController {
             return true;
         }
         false
+    }
+
+    fn get_scroll_script(scroll_timeout: u64, scroll_speed_ms: u64) -> String {
+        format!(
+            r#" new Promise((resolve) => {{
+            var totalHeight = 0;
+            var distance = 100;
+            let scrollTimeout = {};
+            var maxTime = scrollTimeout*1000;
+            var runningTime = 0;
+            let scrollSpeedMs = {};
+            var timer = setInterval(() => {{
+                var scrollHeight = document.body.scrollHeight;
+                window.scrollBy(0, distance);
+                totalHeight += distance;
+                runningTime += scrollSpeedMs;
+        
+                if(totalHeight >= scrollHeight - window.innerHeight || runningTime >maxTime){{
+                    clearInterval(timer);
+                    resolve("ok");
+                }}
+            }}, scrollSpeedMs);
+        }});"#,
+            scroll_timeout, scroll_speed_ms,
+        )
     }
 }
 
