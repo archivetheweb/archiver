@@ -26,7 +26,6 @@ pub struct WarcWriter {
     archive_name: String,
 }
 
-// Currently we use the wayback process to create our WARC file
 impl WarcWriter {
     pub fn new(
         port: Option<u16>,
@@ -53,19 +52,20 @@ impl WarcWriter {
             d
         };
 
-        init_wayback_config(&parent_dir).context("could not initialize wayback configs")?;
+        Self::init_wayback_config(&parent_dir).context("could not initialize wayback configs")?;
 
-        setup_dir(&archive_name, &parent_dir).context("could not setup necessary directories")?;
+        Self::setup_dir(&archive_name, &parent_dir)
+            .context("could not setup necessary directories")?;
 
         let (tx, rx) = sync_channel(1);
 
         // purge the redis cache for our collection
-        purge_redis(&archive_name).context("could not purge redis cache")?;
+        Self::purge_redis(&archive_name).context("could not purge redis cache")?;
 
         let port = if let Some(p) = port {
             p
         } else {
-            get_available_port().unwrap()
+            Self::get_available_port().unwrap()
         };
         let mut args: Vec<String> = vec![
             "--record".into(),
@@ -239,82 +239,81 @@ impl WarcWriter {
         Ok(dir)
     }
 
-    // TODO have wayback create an index for the urls
-    // pub fn create_index()
-
     pub fn terminate(&mut self) -> anyhow::Result<()> {
         debug!("killing warc writer process with id {}", self.process.id());
         self.process.kill()?;
         Ok(())
     }
-}
 
-fn purge_redis(archive_name: &str) -> anyhow::Result<()> {
-    // flush the redis cache in case we have the same name saved
-    let client = redis::Client::open("redis://127.0.0.1/")?;
-    let mut con = client.get_connection()?;
-    let pending_index: i32 = con.del(format!("pywb:{}:pending", archive_name))?;
-    let index: i32 = con.del(format!("pywb:{}:cdxj", archive_name))?;
-    match (pending_index, index) {
-        (0, 0) => {
-            debug!("nothing to purge for {}", archive_name)
+    // flushes the redis cache to avoid stale data
+    fn purge_redis(archive_name: &str) -> anyhow::Result<()> {
+        let client = redis::Client::open("redis://127.0.0.1/")?;
+        let mut con = client.get_connection()?;
+        let pending_index: i32 = con.del(format!("pywb:{}:pending", archive_name))?;
+        let index: i32 = con.del(format!("pywb:{}:cdxj", archive_name))?;
+        match (pending_index, index) {
+            (0, 0) => {
+                debug!("nothing to purge for {}", archive_name)
+            }
+            (x, y) if x > 0 && y > 0 => {
+                debug!("purged both pending and index cache for {}", archive_name)
+            }
+            (x, _) if x > 0 => {
+                debug!("pending purged for {}", archive_name)
+            }
+            (_, y) if y > 0 => {
+                debug!("index purged for {}", archive_name)
+            }
+            _ => {}
         }
-        (x, y) if x > 0 && y > 0 => {
-            debug!("purged both pending and index cache for {}", archive_name)
+        if pending_index > 0 {
+            debug!("pending index deleted from redis");
         }
-        (x, _) if x > 0 => {
-            debug!("pending purged for {}", archive_name)
+        if index > 0 {
+            debug!("index deleted from redis");
         }
-        (_, y) if y > 0 => {
-            debug!("index purged for {}", archive_name)
-        }
-        _ => {}
+        Ok(())
     }
-    if pending_index > 0 {
-        debug!("pending index deleted from redis");
+
+    fn get_available_port() -> Option<u16> {
+        let mut ports: Vec<u16> = (8000..9000).collect();
+        ports.shuffle(&mut thread_rng());
+        ports
+            .iter()
+            .find(|port| Self::port_is_available(**port))
+            .cloned()
     }
-    if index > 0 {
-        debug!("index deleted from redis");
+
+    fn port_is_available(port: u16) -> bool {
+        net::TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
-    Ok(())
-}
 
-fn get_available_port() -> Option<u16> {
-    let mut ports: Vec<u16> = (8000..9000).collect();
-    ports.shuffle(&mut thread_rng());
-    ports.iter().find(|port| port_is_available(**port)).cloned()
-}
+    fn setup_dir(archive_name: &str, parent_dir: &PathBuf) -> anyhow::Result<()> {
+        // first check if we have a collection with wb-manager
+        let mut dir = parent_dir.clone();
+        dir.push("collections");
+        dir.push(&archive_name);
+        if !dir.exists() {
+            let res = Command::new("wb-manager")
+                .current_dir(parent_dir)
+                .args(["init", archive_name])
+                .status()
+                .context("could not setup dir using wb-manager")?;
 
-fn port_is_available(port: u16) -> bool {
-    net::TcpListener::bind(("127.0.0.1", port)).is_ok()
-}
+            if !res.success() {
+                process::exit(res.code().unwrap());
+            }
+            let mut new_dir = dir.clone();
+            new_dir.push("screenshots");
 
-fn setup_dir(archive_name: &str, parent_dir: &PathBuf) -> anyhow::Result<()> {
-    // first check if we have a collection with wb-manager
-    let mut dir = parent_dir.clone();
-    dir.push("collections");
-    dir.push(&archive_name);
-    if !dir.exists() {
-        let res = Command::new("wb-manager")
-            .current_dir(parent_dir)
-            .args(["init", archive_name])
-            .status()
-            .context("could not setup dir using wb-manager")?;
-
-        if !res.success() {
-            process::exit(res.code().unwrap());
+            fs::create_dir(&new_dir).context(format!("could not create dir {:?}", new_dir))?;
         }
-        let mut new_dir = dir.clone();
-        new_dir.push("screenshots");
-
-        fs::create_dir(&new_dir).context(format!("could not create dir {:?}", new_dir))?;
+        Ok(())
     }
-    Ok(())
-}
 
-// Wayback config necessary for the application to work as desired
-fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
-    let cfg = r#"
+    // Wayback config necessary for the application to work as desired
+    fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
+        let cfg = r#"
     collections_root: collections
     archive_paths: archive
     index_paths: indexes
@@ -330,16 +329,17 @@ fn init_wayback_config(path: &PathBuf) -> anyhow::Result<()> {
       filename_template: <unprocessed>-archiver-{timestamp}-{random}.warc.gz
     "#;
 
-    let mut p = path.clone();
-    p.push("config.yaml");
-    if p.exists() {
-        debug!("config.yaml already exists, skipping");
-        return Ok(());
+        let mut p = path.clone();
+        p.push("config.yaml");
+        if p.exists() {
+            debug!("config.yaml already exists, skipping");
+            return Ok(());
+        }
+
+        fs::write(p, cfg).context(format!("could not create config.yaml"))?;
+
+        Ok(())
     }
-
-    fs::write(p, cfg).context(format!("could not create config.yaml"))?;
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -351,7 +351,7 @@ mod test {
     #[test]
     fn sets_up_collection() {
         let p = create_random_tmp_folder().unwrap();
-        setup_dir("example".into(), &p).unwrap();
+        WarcWriter::setup_dir("example".into(), &p).unwrap();
         fs::remove_dir_all(p).unwrap();
     }
 }
