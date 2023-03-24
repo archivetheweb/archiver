@@ -85,7 +85,6 @@ impl Archiver {
         let st = should_terminate.clone();
         let timeout = self.options.fetch_frequency;
 
-        // create a thread where we fetch new work
         tokio::spawn(async move {
             loop {
                 if should_terminate.load(Ordering::Relaxed) {
@@ -221,7 +220,6 @@ impl Archiver {
 
         let current_timestamp = get_unix_timestamp().as_secs() as i64;
 
-        // we loop through the request, if one of them is expired, we delete it
         for r in requests {
             if r.end_timestamp < current_timestamp as i64 {
                 debug!("deleting archive request with id {}", r.id);

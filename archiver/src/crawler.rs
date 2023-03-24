@@ -83,7 +83,6 @@ impl Crawler {
             active_tabs.clone(),
         );
 
-        // we send the first url to crawl
         visit_url_tx
             .send(CrawlRequest::new(self.url.clone(), 0))
             .await
@@ -92,7 +91,6 @@ impl Crawler {
         let domain = get_domain(&self.original_url).unwrap();
 
         while !should_terminate.load(Ordering::Relaxed) {
-            // we receive the scraped urls
             let res = scraped_urls_rx.try_recv();
 
             if res.is_ok() {
@@ -115,7 +113,6 @@ impl Crawler {
                         match self.crawl_type {
                             CrawlType::DomainOnly => {
                                 if new_url.domain != domain {
-                                    // debug!("skipping {} as it is a domain only crawl", new_url.url);
                                     continue;
                                 }
                             }
@@ -157,7 +154,6 @@ impl Crawler {
                                     "retrying url {} at d={}, retried {} so far",
                                     url, depth, count
                                 );
-                                // we resend the url to be fetched
                                 match visit_url_tx
                                     .send(CrawlRequest::new(url.clone(), depth))
                                     .await
@@ -175,7 +171,6 @@ impl Crawler {
                             None => {
                                 warn!("first retry of url {} at d={}", url, depth);
                                 self.failed.insert(url.to_string(), 0);
-                                // this could be blocking if not in it's own thread or not enough buffer
                                 match visit_url_tx
                                     .send(CrawlRequest::new(url.clone(), depth))
                                     .await

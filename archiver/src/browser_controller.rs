@@ -41,7 +41,7 @@ impl BrowserController {
     }
 
     pub fn browse(&self, url: &str, screenshot: bool) -> anyhow::Result<Arc<Tab>> {
-        // we create a new incognito window (no context)
+        // we create a new incognito window to avoid leaking credentials (no context)
         let ctx = self
             .browser
             .new_context()
@@ -56,7 +56,6 @@ impl BrowserController {
             }
         };
         if let Err(e) = nv.wait_until_navigated() {
-            // we wait one more timeout
             warn!("error waiting for navigation, retrying {}", e);
             nv.wait_until_navigated()?;
         }
@@ -88,7 +87,6 @@ impl BrowserController {
         ) {
             Ok(_) => {}
             Err(_) => {
-                // we retry with a smaller timeout
                 warn!("scrolling for url {} is retrying", url);
                 tab.evaluate(
                     &Self::get_scroll_script(self.idle_browser_timeout - 2, 30),
