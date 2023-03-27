@@ -197,3 +197,21 @@ impl std::hash::Hash for UrlInfo {
         self.url.hash(state);
     }
 }
+
+pub struct BrowsingResult {
+    links: Vec<UrlInfo>,
+    pub error: Option<Box<dyn std::error::Error + Send + Sync>>,
+}
+
+impl BrowsingResult {
+    pub fn new(
+        links: Vec<UrlInfo>,
+        error: Option<Box<dyn std::error::Error + Send + Sync>>,
+    ) -> Self {
+        BrowsingResult { links, error }
+    }
+
+    pub fn links(&self) -> Vec<UrlInfo> {
+        self.links.clone()
+    }
+}

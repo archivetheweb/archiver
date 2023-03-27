@@ -35,7 +35,7 @@ fn crawl_website() -> anyhow::Result<()> {
         .crawl_type(CrawlType::DomainWithPageLinks)
         .build()?;
     let runner = aw!(Runner::new(options))?;
-    let res = aw!(runner.run_archiving("https://archivetheweb.com"));
+    let res = aw!(runner.run_archiving("https://permapages.app/"));
     println!("{res:#?}");
     Ok(())
 }

@@ -12,7 +12,7 @@ use tokio::{sync::mpsc, task, time::sleep};
 
 use crate::{
     browser_controller::BrowserController,
-    types::{CrawlRequest, CrawlResult, PageCrawlResult, UrlInfo},
+    types::{BrowsingResult, CrawlRequest, CrawlResult, PageCrawlResult, UrlInfo},
     utils::{extract_url, get_domain, normalize_url_map},
 };
 
@@ -268,15 +268,15 @@ impl Crawler {
                             // headless chrome can't handle pdfs, so we make a direct request for it
                             if u.as_str().ends_with(".pdf") {
                                 match Self::fetch_pdf(u.clone()) {
-                                    Ok(_) => return (vec![], false),
-                                    Err(_) => return (vec![], true),
+                                    Ok(_) => return BrowsingResult::new(vec![], None),
+                                    Err(e) => return BrowsingResult::new(vec![], Some(e.into())),
                                 }
                             }
 
                             let browser = match BrowserController::new(timeout, min_wait, max_wait)
                             {
                                 Ok(b) => b,
-                                Err(_) => return (vec![], true),
+                                Err(e) => return BrowsingResult::new(vec![], Some(e.into())),
                             };
 
                             let tab = browser.browse(u.as_str(), is_first_url);
@@ -286,14 +286,15 @@ impl Crawler {
                                 let head = c.head(&u).send();
 
                                 if head.is_err() {
+                                    let err = head.err().unwrap();
                                     warn!(
                                         "error browsing for {} with tab err {}, head err {}",
                                         &u,
                                         tab.err().unwrap(),
-                                        head.err().unwrap()
+                                        err
                                     );
                                     // we return an empty list of links, and flag as errored out
-                                    return (vec![], true);
+                                    return BrowsingResult::new(vec![], Some(err.into()));
                                 } else {
                                     let head = head.unwrap();
                                     let content_type = head.headers().get("Content-Type");
@@ -305,9 +306,12 @@ impl Crawler {
                                             .contains("application/pdf")
                                     {
                                         if Self::fetch_pdf(u.clone()).is_ok() {
-                                            return (vec![], false);
+                                            return BrowsingResult::new(vec![], None);
                                         } else {
-                                            return (vec![], true);
+                                            return BrowsingResult::new(
+                                                vec![],
+                                                Some(anyhow::anyhow!("could not fetch pdf").into()),
+                                            );
                                         }
                                     } else {
                                         warn!(
@@ -316,7 +320,10 @@ impl Crawler {
                                             tab.err().unwrap(),
                                         );
                                         // we return an empty list of links, and flag as errored out
-                                        return (vec![], true);
+                                        return BrowsingResult::new(
+                                            vec![],
+                                            Some(anyhow::anyhow!("not a pdf").into()),
+                                        );
                                     }
                                 }
                             }
@@ -333,13 +340,13 @@ impl Crawler {
                                 };
                             }
 
-                            return (
+                            return BrowsingResult::new(
                                 browser
                                     .get_links(&tab)
                                     .iter()
                                     .filter_map(normalize_url_map(base_url.into()))
                                     .collect::<Vec<UrlInfo>>(),
-                                false,
+                                None,
                             );
                         })
                         .await;
@@ -360,7 +367,12 @@ impl Crawler {
                         // the boolean in the second element of the tuple
                         // tells us whether there was an error or not
                         // if so, we send the url to the failed url channel
-                        if links.1 {
+                        if links.error.is_some() {
+                            warn!(
+                                "error browsing for {}, error: {}",
+                                url,
+                                links.error.unwrap()
+                            );
                             match failed_url_tx.send(CrawlRequest::new(url, depth)).await {
                                 Ok(_) => {}
                                 Err(e) => {
@@ -369,7 +381,7 @@ impl Crawler {
                             };
                         } else {
                             match scraped_urls_tx
-                                .send(PageCrawlResult::new(url, links.0, depth))
+                                .send(PageCrawlResult::new(url, links.links(), depth))
                                 .await
                             {
                                 Ok(_) => {}
