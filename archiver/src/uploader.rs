@@ -187,7 +187,7 @@ impl Uploader {
             let upload_id = upload_info.id;
             debug!("upload ID: {}", upload_id);
 
-            if size < upload_info.min || size > upload_info.max {
+            if size < upload_info.min {
                 return Err(anyhow!(
                     "chunk size out of allowed range: {} - {}, currently {}",
                     upload_info.min,
