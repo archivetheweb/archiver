@@ -268,15 +268,15 @@ impl Crawler {
                             // headless chrome can't handle pdfs, so we make a direct request for it
                             if u.as_str().ends_with(".pdf") {
                                 match Self::fetch_pdf(u.clone()) {
-                                    Ok(_) => return BrowsingResult::new(vec![], None),
-                                    Err(e) => return BrowsingResult::new(vec![], Some(e.into())),
+                                    Ok(_) => return BrowsingResult::new(Vec::new(), None),
+                                    Err(e) => return BrowsingResult::new(Vec::new(), Some(e.into())),
                                 }
                             }
 
                             let browser = match BrowserController::new(timeout, min_wait, max_wait)
                             {
                                 Ok(b) => b,
-                                Err(e) => return BrowsingResult::new(vec![], Some(e.into())),
+                                Err(e) => return BrowsingResult::new(Vec::new(), Some(e.into())),
                             };
 
                             let tab = browser.browse(u.as_str(), is_first_url);
@@ -294,7 +294,7 @@ impl Crawler {
                                         err
                                     );
                                     // we return an empty list of links, and flag as errored out
-                                    return BrowsingResult::new(vec![], Some(err.into()));
+                                    return BrowsingResult::new(Vec::new(), Some(err.into()));
                                 } else {
                                     let head = head.unwrap();
                                     let content_type = head.headers().get("Content-Type");
@@ -306,10 +306,10 @@ impl Crawler {
                                             .contains("application/pdf")
                                     {
                                         if Self::fetch_pdf(u.clone()).is_ok() {
-                                            return BrowsingResult::new(vec![], None);
+                                            return BrowsingResult::new(Vec::new(), None);
                                         } else {
                                             return BrowsingResult::new(
-                                                vec![],
+                                                Vec::new(),
                                                 Some(anyhow::anyhow!("could not fetch pdf").into()),
                                             );
                                         }
@@ -321,7 +321,7 @@ impl Crawler {
                                         );
                                         // we return an empty list of links, and flag as errored out
                                         return BrowsingResult::new(
-                                            vec![],
+                                            Vec::new(),
                                             Some(anyhow::anyhow!("not a pdf").into()),
                                         );
                                     }

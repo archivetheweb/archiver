@@ -20,11 +20,6 @@ pub struct CrawlUploadResult {
     pub warc_id: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct BundlrBalance {
-    pub balance: String,
-}
-
 #[derive(Debug)]
 pub struct CrawlResult {
     url: String,
@@ -69,6 +64,11 @@ pub struct ArchivingResult {
     pub archive_info: ArchiveInfo,
     pub title: String,
     pub original_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BundlrBalance {
+    pub balance: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
