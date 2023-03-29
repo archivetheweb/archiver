@@ -119,7 +119,7 @@ impl Uploader {
             &file_path
         ))?;
 
-        // first we deploy the file data
+        // first we deploy the screenshot
         let screenshot_file_tx_id = self
             .upload_to_bundlr(
                 screenshot_data,
@@ -182,8 +182,13 @@ impl Uploader {
                 .get(format!("{}/chunks/arweave/-1/-1", BUNDLR_URL))
                 .header("x-chunking-version", "2")
                 .send()
-                .await?;
-            let upload_info = upload_info.json::<BundlrUploadID>().await?;
+                .await
+                .context(format!("could not get upload id from bundlr"))?;
+
+            let upload_info = upload_info
+                .json::<BundlrUploadID>()
+                .await
+                .context("could not parse BundlrUploadId")?;
             let upload_id = upload_info.id;
             debug!("upload ID: {}", upload_id);
 
@@ -260,7 +265,11 @@ impl Uploader {
                 .header("Content-Type", "application/octet-stream")
                 .timeout(Duration::from_secs(40))
                 .send()
-                .await?;
+                .await
+                .context(format!(
+                    "could not finalize bundlr upload with id {}",
+                    upload_id
+                ))?;
 
             let status = finish.status();
             let res = finish.text().await?;
