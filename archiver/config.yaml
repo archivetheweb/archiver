@@ -1,3 +1,4 @@
+# wayback configs
 collections_root: collections
 archive_paths: archive
 index_paths: indexes
