@@ -12,7 +12,7 @@ In its basic form, this application crawls a website up to a specific depth, sav
 
 ### Archive format
 
-[WARC 1.1](http://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/) is the format chosen for this application. It an international standard used by many archives and thus allows for composability.
+[WARC 1.1](http://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/) is the format chosen for this application. It an international standard used by many archives and thus allows for composable applications.
 
 We rely heavily on [Webrecorder](https://webrecorder.net/)'s [pywb](https://github.com/webrecorder/pywb) toolkit to capture all requests between our browser and the website's servers to output a WARC file.
 
