@@ -1,5 +1,6 @@
 FROM rust:1.67 as builder
 
+# Copies overthe source code
 RUN mkdir app
 WORKDIR /app
 COPY ./archiver/src ./archiver/src
@@ -23,11 +24,13 @@ COPY ./warp-contracts-rust/atw/contract/implementation/Cargo.toml ./warp-contrac
 
 COPY ./warp_dre ./warp_dre 
 
+# builds the release
 RUN cargo build --release
 
 
 FROM ubuntu:22.04
 
+# Gets the dependencies
 RUN echo "deb http://security.ubuntu.com/ubuntu focal-security main" | tee /etc/apt/sources.list.d/focal-security.list
 RUN apt-get update && apt-get install wget curl build-essential pkg-config libssl-dev python3.6 python3-pip libssl1.1 -y 
 RUN dpkg -L libssl1.1
@@ -38,13 +41,17 @@ RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.d
 
 RUN rm -rf /var/lib/apt/lists/*
 
+####################################################
 # COPY  ./target/debug/archiver-v1 ./
 # COPY  ./archiver/.secret/wallet.json ./.secret/
+####################################################
+
+# Copies over the release
 COPY --from=builder /app/target/release/archiver-v1 ./
 COPY --from=builder /app/archiver/.secret/wallet.json ./.secret/
 
+# Sets env flags
 ENV RUST_LOG=debug
-
 ENV IN_DOCKER=true
 
 ENTRYPOINT ["./archiver-v1"]
