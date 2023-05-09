@@ -26,7 +26,7 @@ base64 = "0.21.0"
 derive_builder = "0.12.0"
 rand = "0.8.5"
 urlencoding = "2.1.2"
-warp_dre = "1.0.0"
+warp_dre = "1.0.1"
 atw = { path = "../warp-contracts-rust/atw/contract/definition" }
 arloader = "0.1.63"
 cron = "0.12.0"
